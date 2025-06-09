@@ -1,0 +1,8 @@
+bun.lockb
+.bun
+node_modules
+.next
+.env.local
+.env
+*.log
+.DS_Store
