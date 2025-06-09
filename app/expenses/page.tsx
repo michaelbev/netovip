@@ -1,40 +1,50 @@
 "use client"
 
+import { useState, useEffect } from "react"
 import { PageHeader } from "@/components/page-header"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { Plus, Calculator, FileText, TrendingDown } from "lucide-react"
+import { Plus, Calculator, FileText, TrendingDown, Loader2 } from "lucide-react"
+
+interface Expense {
+  id: string
+  description: string
+  amount: number
+  expense_date: string
+  category: string
+  status: string
+  wells?: { name: string }
+}
 
 export default function ExpensesPage() {
-  const mockExpenses = [
-    {
-      id: 1,
-      description: "Well Maintenance - Eagle Ford #23",
-      amount: 15420,
-      date: "2024-01-15",
-      category: "Maintenance",
-      status: "Paid",
-    },
-    {
-      id: 2,
-      description: "Equipment Rental - Permian #18",
-      amount: 8200,
-      date: "2024-01-14",
-      category: "Equipment",
-      status: "Pending",
-    },
-    {
-      id: 3,
-      description: "Transportation Costs",
-      amount: 3850,
-      date: "2024-01-13",
-      category: "Transportation",
-      status: "Paid",
-    },
-    { id: 4, description: "Regulatory Fees", amount: 2100, date: "2024-01-12", category: "Regulatory", status: "Paid" },
-  ]
+  const [expenses, setExpenses] = useState<Expense[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    fetchExpenses()
+  }, [])
+
+  const fetchExpenses = async () => {
+    try {
+      setLoading(true)
+      const response = await fetch("/api/expenses")
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch expenses")
+      }
+
+      const data = await response.json()
+      setExpenses(data.expenses || [])
+    } catch (err: any) {
+      console.error("Error fetching expenses:", err)
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-US", {
@@ -42,6 +52,50 @@ export default function ExpensesPage() {
       currency: "USD",
       minimumFractionDigits: 0,
     }).format(amount)
+  }
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString()
+  }
+
+  const totalExpenses = expenses.reduce((sum, expense) => sum + expense.amount, 0)
+  const pendingExpenses = expenses.filter((e) => e.status === "pending")
+  const pendingAmount = pendingExpenses.reduce((sum, expense) => sum + expense.amount, 0)
+  const categories = [...new Set(expenses.map((e) => e.category))].length
+
+  if (loading) {
+    return (
+      <div className="flex flex-col">
+        <PageHeader title="Expenses" description="Track and manage operational expenses">
+          <Button disabled>
+            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            Loading...
+          </Button>
+        </PageHeader>
+        <div className="flex-1 flex items-center justify-center">
+          <Loader2 className="w-8 h-8 animate-spin" />
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col">
+        <PageHeader title="Expenses" description="Track and manage operational expenses">
+          <Button onClick={fetchExpenses}>
+            <Plus className="w-4 h-4 mr-2" />
+            Retry
+          </Button>
+        </PageHeader>
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center">
+            <p className="text-red-600 mb-4">Error loading expenses: {error}</p>
+            <Button onClick={fetchExpenses}>Try Again</Button>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -62,8 +116,8 @@ export default function ExpensesPage() {
               <TrendingDown className="h-4 w-4 text-red-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-red-600">{formatCurrency(29570)}</div>
-              <p className="text-xs text-gray-600">This month</p>
+              <div className="text-2xl font-bold text-red-600">{formatCurrency(totalExpenses)}</div>
+              <p className="text-xs text-gray-600">{expenses.length} total expenses</p>
             </CardContent>
           </Card>
 
@@ -73,8 +127,8 @@ export default function ExpensesPage() {
               <Calculator className="h-4 w-4 text-orange-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-orange-600">{formatCurrency(8200)}</div>
-              <p className="text-xs text-gray-600">1 pending expense</p>
+              <div className="text-2xl font-bold text-orange-600">{formatCurrency(pendingAmount)}</div>
+              <p className="text-xs text-gray-600">{pendingExpenses.length} pending expenses</p>
             </CardContent>
           </Card>
 
@@ -84,7 +138,7 @@ export default function ExpensesPage() {
               <FileText className="h-4 w-4 text-blue-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">4</div>
+              <div className="text-2xl font-bold">{categories}</div>
               <p className="text-xs text-gray-600">Active categories</p>
             </CardContent>
           </Card>
@@ -97,32 +151,45 @@ export default function ExpensesPage() {
             <CardDescription>Track all operational expenses and payments</CardDescription>
           </CardHeader>
           <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Description</TableHead>
-                  <TableHead>Category</TableHead>
-                  <TableHead>Amount</TableHead>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Status</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {mockExpenses.map((expense) => (
-                  <TableRow key={expense.id}>
-                    <TableCell className="font-medium">{expense.description}</TableCell>
-                    <TableCell>
-                      <Badge variant="outline">{expense.category}</Badge>
-                    </TableCell>
-                    <TableCell className="text-red-600">{formatCurrency(expense.amount)}</TableCell>
-                    <TableCell>{expense.date}</TableCell>
-                    <TableCell>
-                      <Badge variant={expense.status === "Paid" ? "default" : "secondary"}>{expense.status}</Badge>
-                    </TableCell>
+            {expenses.length === 0 ? (
+              <div className="text-center py-8">
+                <p className="text-gray-500">No expenses found</p>
+                <Button className="mt-4">
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add First Expense
+                </Button>
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Description</TableHead>
+                    <TableHead>Category</TableHead>
+                    <TableHead>Amount</TableHead>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Status</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {expenses.map((expense) => (
+                    <TableRow key={expense.id}>
+                      <TableCell className="font-medium">
+                        {expense.description}
+                        {expense.wells && <div className="text-sm text-gray-500">Well: {expense.wells.name}</div>}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline">{expense.category}</Badge>
+                      </TableCell>
+                      <TableCell className="text-red-600">{formatCurrency(expense.amount)}</TableCell>
+                      <TableCell>{formatDate(expense.expense_date)}</TableCell>
+                      <TableCell>
+                        <Badge variant={expense.status === "paid" ? "default" : "secondary"}>{expense.status}</Badge>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
           </CardContent>
         </Card>
       </div>
