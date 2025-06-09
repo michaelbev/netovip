@@ -6,6 +6,8 @@ import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Progress } from "@/components/ui/progress"
+import { PageHeader } from "@/components/page-header"
+import { useDashboardStats } from "@/hooks/use-supabase-data"
 import {
   BarChart3,
   TrendingUp,
@@ -22,19 +24,12 @@ import {
   CheckCircle,
 } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import Link from "next/link"
 
 export default function Dashboard() {
-  // Mock data for demonstration
-  const stats = {
-    totalRevenue: 2847650,
-    monthlyRevenue: 234500,
-    totalExpenses: 1245800,
-    monthlyExpenses: 89200,
-    activeWells: 47,
-    totalOwners: 156,
-    pendingDistributions: 12,
-  }
+  const { stats, loading } = useDashboardStats()
 
+  // Mock data for demonstration
   const recentTransactions = [
     { id: 1, type: "Revenue", well: "Eagle Ford #23", amount: 15420, date: "2024-01-15", status: "Completed" },
     { id: 2, type: "Expense", well: "Permian #18", amount: -3200, date: "2024-01-14", status: "Pending" },
@@ -60,32 +55,25 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white border-b border-gray-200">
-        <div className="px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">Netovip Accounting Manager</h1>
-              <p className="text-gray-600">Oil & Gas Operations Dashboard</p>
-            </div>
-            <div className="flex items-center gap-4">
-              <Button>
-                <Plus className="w-4 h-4 mr-2" />
-                New Transaction
-              </Button>
-              <Button variant="outline">
-                <FileText className="w-4 h-4 mr-2" />
-                Generate Report
-              </Button>
-            </div>
-          </div>
-        </div>
-      </header>
+    <div className="flex flex-col">
+      <PageHeader title="Dashboard" description="Oil & Gas Operations Overview">
+        <Button asChild>
+          <Link href="/revenue">
+            <Plus className="w-4 h-4 mr-2" />
+            New Transaction
+          </Link>
+        </Button>
+        <Button variant="outline" asChild>
+          <Link href="/reports">
+            <FileText className="w-4 h-4 mr-2" />
+            Generate Report
+          </Link>
+        </Button>
+      </PageHeader>
 
-      <div className="p-6">
+      <div className="flex-1 space-y-4 p-4">
         {/* Key Metrics */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
@@ -152,7 +140,7 @@ export default function Dashboard() {
         </div>
 
         {/* Main Content Tabs */}
-        <Tabs defaultValue="overview" className="space-y-6">
+        <Tabs defaultValue="overview" className="space-y-4">
           <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="wells">Wells</TabsTrigger>
@@ -160,8 +148,8 @@ export default function Dashboard() {
             <TabsTrigger value="reports">Reports</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="overview" className="space-y-6">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <TabsContent value="overview" className="space-y-4">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               {/* Revenue vs Expenses Chart */}
               <Card>
                 <CardHeader>
@@ -173,8 +161,8 @@ export default function Dashboard() {
                     <div className="text-center">
                       <BarChart3 className="w-12 h-12 text-gray-400 mx-auto mb-2" />
                       <p className="text-gray-500">Chart visualization would go here</p>
-                      <p className="text-sm text-gray-400">Revenue: {formatCurrency(stats.monthlyRevenue)}</p>
-                      <p className="text-sm text-gray-400">Expenses: {formatCurrency(stats.monthlyExpenses)}</p>
+                      <p className="text-sm text-gray-400">Revenue: {formatCurrency(234500)}</p>
+                      <p className="text-sm text-gray-400">Expenses: {formatCurrency(89200)}</p>
                     </div>
                   </div>
                 </CardContent>
@@ -287,9 +275,11 @@ export default function Dashboard() {
                   <Droplets className="w-16 h-16 text-gray-400 mx-auto mb-4" />
                   <h3 className="text-lg font-medium mb-2">Well Management Module</h3>
                   <p className="text-gray-600 mb-4">Comprehensive well tracking and production monitoring</p>
-                  <Button>
-                    <Plus className="w-4 h-4 mr-2" />
-                    Add New Well
+                  <Button asChild>
+                    <Link href="/wells">
+                      <Plus className="w-4 h-4 mr-2" />
+                      Manage Wells
+                    </Link>
                   </Button>
                 </div>
               </CardContent>
@@ -307,10 +297,20 @@ export default function Dashboard() {
                   <DollarSign className="w-16 h-16 text-gray-400 mx-auto mb-4" />
                   <h3 className="text-lg font-medium mb-2">Transaction History</h3>
                   <p className="text-gray-600 mb-4">Complete transaction management and tracking</p>
-                  <Button>
-                    <Plus className="w-4 h-4 mr-2" />
-                    Add Transaction
-                  </Button>
+                  <div className="flex gap-2 justify-center">
+                    <Button asChild>
+                      <Link href="/revenue">
+                        <Plus className="w-4 h-4 mr-2" />
+                        Add Revenue
+                      </Link>
+                    </Button>
+                    <Button variant="outline" asChild>
+                      <Link href="/expenses">
+                        <Plus className="w-4 h-4 mr-2" />
+                        Add Expense
+                      </Link>
+                    </Button>
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -327,9 +327,11 @@ export default function Dashboard() {
                   <FileText className="w-16 h-16 text-gray-400 mx-auto mb-4" />
                   <h3 className="text-lg font-medium mb-2">Reporting Suite</h3>
                   <p className="text-gray-600 mb-4">Financial reports, compliance documents, and analytics</p>
-                  <Button>
-                    <FileText className="w-4 h-4 mr-2" />
-                    Generate Report
+                  <Button asChild>
+                    <Link href="/reports">
+                      <FileText className="w-4 h-4 mr-2" />
+                      Generate Report
+                    </Link>
                   </Button>
                 </div>
               </CardContent>
