@@ -1,10 +1,20 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr"
 import { cookies } from "next/headers"
 
+// Cache for server client instances per request
+const serverClientCache = new Map<string, any>()
+
 export async function createClient() {
   const cookieStore = await cookies()
 
-  return createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
+  // Create a cache key based on cookies to ensure we reuse clients within the same request
+  const cookieString = cookieStore.toString()
+
+  if (serverClientCache.has(cookieString)) {
+    return serverClientCache.get(cookieString)
+  }
+
+  const client = createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
     cookies: {
       get(name: string) {
         return cookieStore.get(name)?.value
@@ -29,4 +39,14 @@ export async function createClient() {
       },
     },
   })
+
+  // Cache the client for this request
+  serverClientCache.set(cookieString, client)
+
+  // Clean up cache after a reasonable time to prevent memory leaks
+  setTimeout(() => {
+    serverClientCache.delete(cookieString)
+  }, 60000) // 1 minute
+
+  return client
 }
