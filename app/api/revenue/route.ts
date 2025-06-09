@@ -13,10 +13,36 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
-  const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", user.id).single()
+  const { data: profile, error: profileError } = await supabase
+    .from("profiles")
+    .select("company_id")
+    .eq("id", user.id)
+    .single()
+
+  if (profileError) {
+    console.error("Profile error:", profileError)
+
+    // If profile doesn't exist, create a basic one
+    if (profileError.code === "PGRST116") {
+      const { error: createError } = await supabase.from("profiles").insert({
+        id: user.id,
+        email: user.email!,
+        full_name: user.user_metadata?.full_name || null,
+        role: "operator",
+      })
+
+      if (createError) {
+        console.error("Failed to create profile:", createError)
+      }
+
+      return NextResponse.json({ revenue: [] })
+    }
+
+    return NextResponse.json({ error: "Profile lookup failed" }, { status: 500 })
+  }
 
   if (!profile?.company_id) {
-    return NextResponse.json({ error: "No company associated with user" }, { status: 400 })
+    return NextResponse.json({ revenue: [] })
   }
 
   const { data: revenue, error } = await supabase

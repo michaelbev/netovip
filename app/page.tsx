@@ -1,5 +1,7 @@
 "use client"
 
+import { useState, useEffect } from "react"
+import { supabase } from "@/lib/supabase"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -22,12 +24,62 @@ import {
   MoreHorizontal,
   AlertTriangle,
   CheckCircle,
+  Building2,
 } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import Link from "next/link"
 
 export default function Dashboard() {
+  const [needsSetup, setNeedsSetup] = useState(false)
   const { stats, loading } = useDashboardStats()
+
+  useEffect(() => {
+    const checkSetup = async () => {
+      try {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser()
+        if (user) {
+          const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", user.id).single()
+
+          if (!profile?.company_id) {
+            setNeedsSetup(true)
+          }
+        }
+      } catch (error) {
+        console.error("Setup check error:", error)
+      }
+    }
+
+    checkSetup()
+  }, [])
+
+  if (needsSetup) {
+    return (
+      <div className="flex flex-col">
+        <PageHeader title="Setup Required" description="Complete your company setup to continue">
+          <Button asChild>
+            <Link href="/setup">Complete Setup</Link>
+          </Button>
+        </PageHeader>
+        <div className="flex-1 p-4">
+          <Card>
+            <CardContent className="text-center py-12">
+              <Building2 className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+              <h3 className="text-lg font-medium mb-2">Company Setup Required</h3>
+              <p className="text-gray-600 mb-4">Please complete your company setup to access the dashboard</p>
+              <Button asChild>
+                <Link href="/setup">
+                  <Building2 className="w-4 h-4 mr-2" />
+                  Set Up Company
+                </Link>
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    )
+  }
 
   // Mock data for demonstration
   const recentTransactions = [
