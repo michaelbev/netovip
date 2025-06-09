@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase-server"
+import { createAdminClient } from "@/lib/supabase-admin"
 import { type NextRequest, NextResponse } from "next/server"
 
 export async function POST(request: NextRequest) {
@@ -11,8 +12,32 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    // Create company
-    const { data: company, error: companyError } = await supabase
+    // First, verify the user exists and is authenticated
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser()
+
+    if (authError || !user || user.id !== body.userId) {
+      return NextResponse.json({ error: "Unauthorized - user mismatch" }, { status: 401 })
+    }
+
+    // Check if user already has a company
+    const { data: existingProfile } = await supabase
+      .from("profiles")
+      .select("company_id")
+      .eq("id", body.userId)
+      .single()
+
+    if (existingProfile?.company_id) {
+      return NextResponse.json({ error: "User already has a company" }, { status: 400 })
+    }
+
+    // Use admin client to bypass RLS
+    const adminSupabase = createAdminClient()
+
+    // Create company using admin client
+    const { data: company, error: companyError } = await adminSupabase
       .from("companies")
       .insert({
         name: body.name,
@@ -21,41 +46,30 @@ export async function POST(request: NextRequest) {
       .select()
       .single()
 
-    if (companyError) throw companyError
-
-    // Update user profile with company_id and admin role
-    const { error: profileError } = await supabase
-      .from("profiles")
-      .update({
-        company_id: company.id,
-        role: "admin",
-        full_name: body.userName,
-      })
-      .eq("id", body.userId)
-
-    if (profileError) throw profileError
-
-    // Create default tenant settings
-    const { error: settingsError } = await supabase.from("tenant_settings").insert({
-      company_id: company.id,
-    })
-
-    if (settingsError) {
-      console.warn("Failed to create tenant settings:", settingsError)
-      // Don't fail the whole process for this
+    if (companyError) {
+      console.error("Company creation error:", companyError)
+      throw new Error(`Failed to create company: ${companyError.message}`)
     }
 
-    // Initialize tenant usage tracking
-    const currentDate = new Date()
-    const { error: usageError } = await supabase.from("tenant_usage").insert({
-      company_id: company.id,
-      month: currentDate.toISOString().substring(0, 7) + "-01", // First day of current month
-      user_count: 1,
-    })
+    // Update or create user profile with company_id and admin role
+    const { error: profileError } = await adminSupabase.from("profiles").upsert(
+      {
+        id: body.userId,
+        email: body.email,
+        full_name: body.userName,
+        role: "admin",
+        company_id: company.id,
+      },
+      {
+        onConflict: "id",
+      },
+    )
 
-    if (usageError) {
-      console.warn("Failed to create usage tracking:", usageError)
-      // Don't fail the whole process for this
+    if (profileError) {
+      console.error("Profile update error:", profileError)
+      // Try to clean up the company if profile creation failed
+      await adminSupabase.from("companies").delete().eq("id", company.id)
+      throw new Error(`Failed to update profile: ${profileError.message}`)
     }
 
     return NextResponse.json({ success: true, company }, { status: 201 })
@@ -63,4 +77,33 @@ export async function POST(request: NextRequest) {
     console.error("Company creation error:", error)
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
+}
+
+export async function GET() {
+  const supabase = createClient()
+
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser()
+
+  if (authError || !user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
+
+  // Get user's company
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select(`
+      company_id,
+      companies:company_id(*)
+    `)
+    .eq("id", user.id)
+    .single()
+
+  if (!profile?.company_id) {
+    return NextResponse.json({ company: null })
+  }
+
+  return NextResponse.json({ company: profile.companies })
 }

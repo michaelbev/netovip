@@ -2,9 +2,9 @@ import { createClient } from "@/lib/supabase-server"
 import { NextResponse } from "next/server"
 
 export async function GET() {
-  const supabase = createClient()
-
   try {
+    const supabase = await createClient()
+
     const {
       data: { user },
       error: authError,
@@ -14,81 +14,66 @@ export async function GET() {
       return NextResponse.json(
         {
           authenticated: false,
+          needsSetup: true,
           error: "Not authenticated",
         },
         { status: 401 },
       )
     }
 
-    // Get user profile
+    // Check for profile and company association
     const { data: profile, error: profileError } = await supabase
       .from("profiles")
-      .select(`
-        *,
-        companies:company_id(
-          id,
-          name,
-          email
-        )
-      `)
+      .select("company_id, role, full_name")
       .eq("id", user.id)
       .single()
 
     if (profileError) {
-      console.error("Profile error:", profileError)
-
-      // If profile doesn't exist, create one
+      // If profile doesn't exist, user needs setup
       if (profileError.code === "PGRST116") {
-        const { data: newProfile, error: createError } = await supabase
-          .from("profiles")
-          .insert({
-            id: user.id,
-            email: user.email!,
-            full_name: user.user_metadata?.full_name || null,
-            role: "operator",
-          })
-          .select()
-          .single()
-
-        if (createError) {
-          return NextResponse.json({
-            authenticated: true,
-            user: user,
-            profile: null,
-            needsSetup: true,
-            error: "Failed to create profile",
-          })
-        }
-
         return NextResponse.json({
           authenticated: true,
-          user: user,
-          profile: newProfile,
           needsSetup: true,
+          user: {
+            id: user.id,
+            email: user.email,
+          },
         })
       }
 
-      return NextResponse.json({
-        authenticated: true,
-        user: user,
-        profile: null,
-        needsSetup: true,
-        error: profileError.message,
-      })
+      return NextResponse.json(
+        {
+          authenticated: false,
+          needsSetup: true,
+          error: "Profile lookup failed",
+        },
+        { status: 500 },
+      )
     }
+
+    // Check if user has company association
+    const needsSetup = !profile?.company_id
 
     return NextResponse.json({
       authenticated: true,
-      user: user,
-      profile: profile,
-      needsSetup: !profile.company_id,
+      needsSetup,
+      user: {
+        id: user.id,
+        email: user.email,
+        profile: {
+          full_name: profile?.full_name,
+          role: profile?.role,
+          company_id: profile?.company_id,
+        },
+      },
     })
   } catch (error: any) {
     console.error("Auth check error:", error)
     return NextResponse.json(
       {
         authenticated: false,
-        error: error.message,
+        needsSetup: true,
+        error: "Internal server error",
       },
       { status: 500 },
     )

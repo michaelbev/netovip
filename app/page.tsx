@@ -1,396 +1,179 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { supabase } from "@/lib/supabase"
+import { useAuth } from "@/contexts/auth-context"
+import { useSupabaseData } from "@/hooks/use-supabase-data"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Progress } from "@/components/ui/progress"
-import { PageHeader } from "@/components/page-header"
-import { useDashboardStats } from "@/hooks/use-supabase-data"
-import {
-  BarChart3,
-  TrendingUp,
-  TrendingDown,
-  DollarSign,
-  Droplets,
-  Users,
-  FileText,
-  Plus,
-  Eye,
-  Edit,
-  MoreHorizontal,
-  AlertTriangle,
-  CheckCircle,
-  Building2,
-} from "lucide-react"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import Link from "next/link"
+import { Loader2, AlertCircle, BarChart3, Droplets, Users, TrendingUp } from "lucide-react"
+import { useRouter } from "next/navigation"
 
 export default function Dashboard() {
-  const [needsSetup, setNeedsSetup] = useState(false)
-  const { stats, loading } = useDashboardStats()
+  const { user, session, loading: authLoading, signOut } = useAuth()
+  const { wells, revenue, owners, production, loading: dataLoading, error, refetch } = useSupabaseData()
+  const router = useRouter()
 
-  useEffect(() => {
-    const checkSetup = async () => {
-      try {
-        const {
-          data: { user },
-        } = await supabase.auth.getUser()
-        if (user) {
-          const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", user.id).single()
-
-          if (!profile?.company_id) {
-            setNeedsSetup(true)
-          }
-        }
-      } catch (error) {
-        console.error("Setup check error:", error)
-      }
-    }
-
-    checkSetup()
-  }, [])
-
-  if (needsSetup) {
+  // Show loading while checking authentication
+  if (authLoading) {
     return (
-      <div className="flex flex-col">
-        <PageHeader title="Setup Required" description="Complete your company setup to continue">
-          <Button asChild>
-            <Link href="/setup">Complete Setup</Link>
-          </Button>
-        </PageHeader>
-        <div className="flex-1 p-4">
-          <Card>
-            <CardContent className="text-center py-12">
-              <Building2 className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-lg font-medium mb-2">Company Setup Required</h3>
-              <p className="text-gray-600 mb-4">Please complete your company setup to access the dashboard</p>
-              <Button asChild>
-                <Link href="/setup">
-                  <Building2 className="w-4 h-4 mr-2" />
-                  Set Up Company
-                </Link>
-              </Button>
-            </CardContent>
-          </Card>
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4" />
+          <p>Loading...</p>
         </div>
       </div>
     )
   }
 
-  // Mock data for demonstration
-  const recentTransactions = [
-    { id: 1, type: "Revenue", well: "Eagle Ford #23", amount: 15420, date: "2024-01-15", status: "Completed" },
-    { id: 2, type: "Expense", well: "Permian #18", amount: -3200, date: "2024-01-14", status: "Pending" },
-    { id: 3, type: "Revenue", well: "Bakken #31", amount: 22100, date: "2024-01-13", status: "Completed" },
-    { id: 4, type: "Expense", well: "Eagle Ford #23", amount: -1850, date: "2024-01-12", status: "Completed" },
-    { id: 5, type: "Revenue", well: "Permian #25", amount: 18750, date: "2024-01-11", status: "Completed" },
-  ]
+  // Redirect to login if not authenticated
+  if (!session || !user) {
+    router.push("/login")
+    return null
+  }
 
-  const topWells = [
-    { name: "Eagle Ford #23", production: 1250, revenue: 89500, efficiency: 94 },
-    { name: "Permian #18", production: 1180, revenue: 82300, efficiency: 91 },
-    { name: "Bakken #31", production: 1050, revenue: 73500, efficiency: 88 },
-    { name: "Permian #25", production: 980, revenue: 68600, efficiency: 85 },
-  ]
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: "USD",
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(amount)
+  const handleSignOut = async () => {
+    await signOut()
+    router.push("/login")
   }
 
   return (
-    <div className="flex flex-col">
-      <PageHeader title="Dashboard" description="Oil & Gas Operations Overview">
-        <Button asChild>
-          <Link href="/revenue">
-            <Plus className="w-4 h-4 mr-2" />
-            New Transaction
-          </Link>
+    <div className="container mx-auto p-6">
+      {/* Header */}
+      <div className="flex justify-between items-center mb-8">
+        <div>
+          <h1 className="text-3xl font-bold">Oil & Gas Dashboard</h1>
+          <p className="text-muted-foreground">Welcome back, {user.email}</p>
+        </div>
+        <Button onClick={handleSignOut} variant="outline">
+          Sign Out
         </Button>
-        <Button variant="outline" asChild>
-          <Link href="/reports">
-            <FileText className="w-4 h-4 mr-2" />
-            Generate Report
-          </Link>
-        </Button>
-      </PageHeader>
+      </div>
 
-      <div className="flex-1 space-y-4 p-4">
-        {/* Key Metrics */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* Error Display */}
+      {error && (
+        <Card className="mb-6 border-red-200 bg-red-50">
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-2 text-red-700">
+              <AlertCircle className="h-5 w-5" />
+              <span>{error}</span>
+              <Button onClick={refetch} variant="outline" size="sm" className="ml-auto">
+                Retry
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Loading State */}
+      {dataLoading && (
+        <div className="flex items-center justify-center py-12">
+          <div className="text-center">
+            <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4" />
+            <p>Loading dashboard data...</p>
+          </div>
+        </div>
+      )}
+
+      {/* Dashboard Stats */}
+      {!dataLoading && (
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 mb-8">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
-              <DollarSign className="h-4 w-4 text-green-600" />
+              <CardTitle className="text-sm font-medium">Total Wells</CardTitle>
+              <Droplets className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-green-600">{formatCurrency(stats.totalRevenue)}</div>
-              <p className="text-xs text-gray-600">
-                <span className="text-green-600 flex items-center">
-                  <TrendingUp className="w-3 h-3 mr-1" />
-                  +12.5% from last month
-                </span>
-              </p>
+              <div className="text-2xl font-bold">{wells.length}</div>
+              <p className="text-xs text-muted-foreground">Active wells in portfolio</p>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Expenses</CardTitle>
-              <TrendingDown className="h-4 w-4 text-red-600" />
+              <CardTitle className="text-sm font-medium">Revenue Records</CardTitle>
+              <TrendingUp className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-red-600">{formatCurrency(stats.totalExpenses)}</div>
-              <p className="text-xs text-gray-600">
-                <span className="text-red-600 flex items-center">
-                  <TrendingUp className="w-3 h-3 mr-1" />
-                  +3.2% from last month
-                </span>
-              </p>
+              <div className="text-2xl font-bold">{revenue.length}</div>
+              <p className="text-xs text-muted-foreground">Revenue entries this period</p>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Active Wells</CardTitle>
-              <Droplets className="h-4 w-4 text-blue-600" />
+              <CardTitle className="text-sm font-medium">Owners</CardTitle>
+              <Users className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{stats.activeWells}</div>
-              <p className="text-xs text-gray-600">
-                <span className="text-green-600 flex items-center">
-                  <TrendingUp className="w-3 h-3 mr-1" />
-                  +2 new wells this month
-                </span>
-              </p>
+              <div className="text-2xl font-bold">{owners.length}</div>
+              <p className="text-xs text-muted-foreground">Registered owners</p>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Owners</CardTitle>
-              <Users className="h-4 w-4 text-purple-600" />
+              <CardTitle className="text-sm font-medium">Production</CardTitle>
+              <BarChart3 className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{stats.totalOwners}</div>
-              <p className="text-xs text-gray-600">
-                <span className="text-orange-600 flex items-center">
-                  <AlertTriangle className="w-3 h-3 mr-1" />
-                  {stats.pendingDistributions} pending distributions
-                </span>
-              </p>
+              <div className="text-2xl font-bold">{production.length}</div>
+              <p className="text-xs text-muted-foreground">Production records</p>
             </CardContent>
           </Card>
         </div>
+      )}
 
-        {/* Main Content Tabs */}
-        <Tabs defaultValue="overview" className="space-y-4">
-          <TabsList className="grid w-full grid-cols-4">
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="wells">Wells</TabsTrigger>
-            <TabsTrigger value="transactions">Transactions</TabsTrigger>
-            <TabsTrigger value="reports">Reports</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="overview" className="space-y-4">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              {/* Revenue vs Expenses Chart */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>Monthly Performance</CardTitle>
-                  <CardDescription>Revenue vs Expenses over the last 6 months</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="h-64 flex items-center justify-center bg-gray-50 rounded-lg">
-                    <div className="text-center">
-                      <BarChart3 className="w-12 h-12 text-gray-400 mx-auto mb-2" />
-                      <p className="text-gray-500">Chart visualization would go here</p>
-                      <p className="text-sm text-gray-400">Revenue: {formatCurrency(234500)}</p>
-                      <p className="text-sm text-gray-400">Expenses: {formatCurrency(89200)}</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Top Performing Wells */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>Top Performing Wells</CardTitle>
-                  <CardDescription>Wells ranked by revenue and efficiency</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    {topWells.map((well, index) => (
-                      <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                        <div>
-                          <p className="font-medium">{well.name}</p>
-                          <p className="text-sm text-gray-600">{well.production} bbl/day</p>
-                        </div>
-                        <div className="text-right">
-                          <p className="font-medium text-green-600">{formatCurrency(well.revenue)}</p>
-                          <div className="flex items-center gap-2">
-                            <Progress value={well.efficiency} className="w-16 h-2" />
-                            <span className="text-xs text-gray-600">{well.efficiency}%</span>
-                          </div>
-                        </div>
+      {/* Recent Data */}
+      {!dataLoading && (
+        <div className="grid gap-6 md:grid-cols-2">
+          <Card>
+            <CardHeader>
+              <CardTitle>Recent Wells</CardTitle>
+              <CardDescription>Latest wells in your portfolio</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {wells.length > 0 ? (
+                <div className="space-y-2">
+                  {wells.slice(0, 5).map((well) => (
+                    <div key={well.id} className="flex justify-between items-center p-2 border rounded">
+                      <div>
+                        <p className="font-medium">{well.name}</p>
+                        <p className="text-sm text-muted-foreground">{well.api_number}</p>
                       </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Recent Transactions */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Recent Transactions</CardTitle>
-                <CardDescription>Latest revenue and expense entries</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Type</TableHead>
-                      <TableHead>Well</TableHead>
-                      <TableHead>Amount</TableHead>
-                      <TableHead>Date</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead className="w-[50px]"></TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {recentTransactions.map((transaction) => (
-                      <TableRow key={transaction.id}>
-                        <TableCell>
-                          <Badge variant={transaction.type === "Revenue" ? "default" : "secondary"}>
-                            {transaction.type}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="font-medium">{transaction.well}</TableCell>
-                        <TableCell className={transaction.amount > 0 ? "text-green-600" : "text-red-600"}>
-                          {formatCurrency(Math.abs(transaction.amount))}
-                        </TableCell>
-                        <TableCell>{transaction.date}</TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            {transaction.status === "Completed" ? (
-                              <CheckCircle className="w-4 h-4 text-green-600" />
-                            ) : (
-                              <AlertTriangle className="w-4 h-4 text-orange-600" />
-                            )}
-                            <span className="text-sm">{transaction.status}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="sm">
-                                <MoreHorizontal className="w-4 h-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem>
-                                <Eye className="w-4 h-4 mr-2" />
-                                View Details
-                              </DropdownMenuItem>
-                              <DropdownMenuItem>
-                                <Edit className="w-4 h-4 mr-2" />
-                                Edit
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="wells">
-            <Card>
-              <CardHeader>
-                <CardTitle>Well Management</CardTitle>
-                <CardDescription>Manage your oil & gas wells and production data</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="text-center py-12">
-                  <Droplets className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                  <h3 className="text-lg font-medium mb-2">Well Management Module</h3>
-                  <p className="text-gray-600 mb-4">Comprehensive well tracking and production monitoring</p>
-                  <Button asChild>
-                    <Link href="/wells">
-                      <Plus className="w-4 h-4 mr-2" />
-                      Manage Wells
-                    </Link>
-                  </Button>
+                      <div className="text-sm text-muted-foreground">{well.status}</div>
+                    </div>
+                  ))}
                 </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
+              ) : (
+                <p className="text-muted-foreground">No wells found</p>
+              )}
+            </CardContent>
+          </Card>
 
-          <TabsContent value="transactions">
-            <Card>
-              <CardHeader>
-                <CardTitle>Transaction Management</CardTitle>
-                <CardDescription>Detailed view of all revenue and expense transactions</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="text-center py-12">
-                  <DollarSign className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                  <h3 className="text-lg font-medium mb-2">Transaction History</h3>
-                  <p className="text-gray-600 mb-4">Complete transaction management and tracking</p>
-                  <div className="flex gap-2 justify-center">
-                    <Button asChild>
-                      <Link href="/revenue">
-                        <Plus className="w-4 h-4 mr-2" />
-                        Add Revenue
-                      </Link>
-                    </Button>
-                    <Button variant="outline" asChild>
-                      <Link href="/expenses">
-                        <Plus className="w-4 h-4 mr-2" />
-                        Add Expense
-                      </Link>
-                    </Button>
-                  </div>
+          <Card>
+            <CardHeader>
+              <CardTitle>Recent Revenue</CardTitle>
+              <CardDescription>Latest revenue entries</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {revenue.length > 0 ? (
+                <div className="space-y-2">
+                  {revenue.slice(0, 5).map((rev) => (
+                    <div key={rev.id} className="flex justify-between items-center p-2 border rounded">
+                      <div>
+                        <p className="font-medium">${rev.gross_revenue?.toLocaleString() || "0"}</p>
+                        <p className="text-sm text-muted-foreground">{rev.production_month}</p>
+                      </div>
+                      <div className="text-sm text-muted-foreground">{rev.product_type}</div>
+                    </div>
+                  ))}
                 </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="reports">
-            <Card>
-              <CardHeader>
-                <CardTitle>Reports & Analytics</CardTitle>
-                <CardDescription>Generate comprehensive reports for compliance and analysis</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="text-center py-12">
-                  <FileText className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                  <h3 className="text-lg font-medium mb-2">Reporting Suite</h3>
-                  <p className="text-gray-600 mb-4">Financial reports, compliance documents, and analytics</p>
-                  <Button asChild>
-                    <Link href="/reports">
-                      <FileText className="w-4 h-4 mr-2" />
-                      Generate Report
-                    </Link>
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
-      </div>
+              ) : (
+                <p className="text-muted-foreground">No revenue records found</p>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </div>
   )
 }
