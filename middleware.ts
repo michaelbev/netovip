@@ -40,7 +40,6 @@ export async function middleware(req: NextRequest) {
   // Check if user is authenticated
   const {
     data: { session },
-    error: sessionError,
   } = await supabase.auth.getSession()
 
   // Handle authentication routes
@@ -53,46 +52,44 @@ export async function middleware(req: NextRequest) {
     req.nextUrl.pathname.startsWith("/_next") ||
     req.nextUrl.pathname === "/"
 
-  // If no session and trying to access protected route, redirect to login
-  if (!session && !isPublicRoute) {
+  if (isPublicRoute) {
+    return res
+  }
+
+  if (!session && !isAuthRoute && !req.nextUrl.pathname.startsWith("/api")) {
     const redirectUrl = new URL("/login", req.url)
     redirectUrl.searchParams.set("redirect", req.nextUrl.pathname)
     return NextResponse.redirect(redirectUrl)
   }
 
-  // If has session but on auth route, redirect to dashboard
   if (session && isAuthRoute) {
     return NextResponse.redirect(new URL("/", req.url))
   }
 
-  // If authenticated, check tenant association (but don't block if missing)
-  if (session && !isAuthRoute && !req.nextUrl.pathname.startsWith("/api")) {
-    try {
-      // Get user profile with company_id
-      const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", session.user.id).single()
+  // If authenticated, check tenant association
+  if (session) {
+    // Get user profile with company_id
+    const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", session.user.id).single()
 
-      // If no company associated and not on signup page, redirect to signup
-      if (
-        !profile?.company_id &&
-        !req.nextUrl.pathname.startsWith("/signup") &&
-        !req.nextUrl.pathname.startsWith("/onboarding")
-      ) {
-        return NextResponse.redirect(new URL("/signup", req.url))
-      }
+    // If no company associated and not on onboarding page, redirect to onboarding
+    if (
+      !profile?.company_id &&
+      !req.nextUrl.pathname.startsWith("/onboarding") &&
+      !req.nextUrl.pathname.startsWith("/api") &&
+      !req.nextUrl.pathname.startsWith("/signup")
+    ) {
+      return NextResponse.redirect(new URL("/signup", req.url))
+    }
 
-      // Add tenant ID to request headers for API routes
-      if (profile?.company_id && req.nextUrl.pathname.startsWith("/api")) {
-        const requestHeaders = new Headers(req.headers)
-        requestHeaders.set("x-tenant-id", profile.company_id)
-        return NextResponse.next({
-          request: {
-            headers: requestHeaders,
-          },
-        })
-      }
-    } catch (error) {
-      // If profile lookup fails, don't block - let the app handle it
-      console.warn("Profile lookup failed in middleware:", error)
+    // Add tenant ID to request headers for API routes
+    if (profile?.company_id && req.nextUrl.pathname.startsWith("/api")) {
+      const requestHeaders = new Headers(req.headers)
+      requestHeaders.set("x-tenant-id", profile.company_id)
+      return NextResponse.next({
+        request: {
+          headers: requestHeaders,
+        },
+      })
     }
   }
 
