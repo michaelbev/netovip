@@ -72,6 +72,21 @@ export interface Database {
           id: string
           name: string
           email: string | null
+          phone: string | null
+          website: string | null
+          address: string | null
+          city: string | null
+          state: string | null
+          zip: string | null
+          country: string | null
+          tax_id: string | null
+          industry: string | null
+          description: string | null
+          operator_id: string | null
+          rrc_number: string | null
+          federal_id: string | null
+          insurance_provider: string | null
+          emergency_contact: string | null
           created_at: string
           updated_at: string
         }
@@ -79,6 +94,21 @@ export interface Database {
           id?: string
           name: string
           email?: string | null
+          phone?: string | null
+          website?: string | null
+          address?: string | null
+          city?: string | null
+          state?: string | null
+          zip?: string | null
+          country?: string | null
+          tax_id?: string | null
+          industry?: string | null
+          description?: string | null
+          operator_id?: string | null
+          rrc_number?: string | null
+          federal_id?: string | null
+          insurance_provider?: string | null
+          emergency_contact?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -86,6 +116,21 @@ export interface Database {
           id?: string
           name?: string
           email?: string | null
+          phone?: string | null
+          website?: string | null
+          address?: string | null
+          city?: string | null
+          state?: string | null
+          zip?: string | null
+          country?: string | null
+          tax_id?: string | null
+          industry?: string | null
+          description?: string | null
+          operator_id?: string | null
+          rrc_number?: string | null
+          federal_id?: string | null
+          insurance_provider?: string | null
+          emergency_contact?: string | null
           created_at?: string
           updated_at?: string
         }
