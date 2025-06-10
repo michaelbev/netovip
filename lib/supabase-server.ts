@@ -3,6 +3,7 @@ import { cookies } from "next/headers"
 
 export async function createClient() {
   const cookieStore = await cookies()
+  console.log("Server cookies:", cookieStore.getAll())
 
   // Ensure environment variables are available
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -26,12 +27,26 @@ export async function createClient() {
   const client = createServerClient(supabaseUrl, supabaseAnonKey, {
     cookies: {
       getAll() {
-        return cookieStore.getAll()
+        return cookieStore.getAll().map(cookie => {
+          // Remove base64- prefix if present
+          if (cookie.name === 'oil-gas-accounting-auth' && cookie.value.startsWith('base64-')) {
+            return {
+              ...cookie,
+              value: cookie.value.replace('base64-', '')
+            }
+          }
+          return cookie
+        })
       },
       setAll(cookiesToSet) {
         try {
           cookiesToSet.forEach(({ name, value, options }) => {
-            cookieStore.set(name, value, options)
+            // Add base64- prefix to auth cookie
+            if (name === 'oil-gas-accounting-auth') {
+              cookieStore.set(name, `base64-${value}`, options)
+            } else {
+              cookieStore.set(name, value, options)
+            }
           })
         } catch (error) {
           // The `setAll` method was called from a Server Component.

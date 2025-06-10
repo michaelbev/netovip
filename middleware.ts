@@ -36,17 +36,27 @@ export async function middleware(request: NextRequest) {
     const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
       cookies: {
         getAll() {
-          return request.cookies.getAll()
+          return request.cookies.getAll().map(cookie => {
+            // Remove base64- prefix if present
+            if (cookie.name === 'oil-gas-accounting-auth' && cookie.value.startsWith('base64-')) {
+              return {
+                ...cookie,
+                value: cookie.value.replace('base64-', '')
+              }
+            }
+            return cookie
+          })
         },
         setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value))
-          response = NextResponse.next({
-            request: {
-              headers: request.headers,
-            },
-          })
           cookiesToSet.forEach(({ name, value, options }) => {
-            response.cookies.set(name, value, options)
+            // Add base64- prefix to auth cookie
+            if (name === 'oil-gas-accounting-auth') {
+              request.cookies.set(name, `base64-${value}`)
+              response.cookies.set(name, `base64-${value}`, options)
+            } else {
+              request.cookies.set(name, value)
+              response.cookies.set(name, value, options)
+            }
           })
         },
       },

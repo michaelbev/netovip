@@ -1,5 +1,7 @@
 "use client"
 
+import type React from "react"
+
 import { useState, useEffect } from "react"
 import { useAuth } from "@/contexts/auth-context"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -30,7 +32,8 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 
-export default function Dashboard() {
+// Create a wrapper component that handles auth context safely
+function DashboardContent() {
   const { user, loading: authLoading } = useAuth()
   const router = useRouter()
   const [needsSetup, setNeedsSetup] = useState(false)
@@ -115,12 +118,20 @@ export default function Dashboard() {
               <Building2 className="w-16 h-16 text-gray-400 mx-auto mb-4" />
               <h3 className="text-lg font-medium mb-2">Company Setup Required</h3>
               <p className="text-gray-600 mb-4">Please complete your company setup to access the dashboard</p>
-              <Button asChild>
-                <Link href="/setup">
-                  <Building2 className="w-4 h-4 mr-2" />
-                  Set Up Company
-                </Link>
-              </Button>
+              <div className="space-y-2">
+                <Button asChild>
+                  <Link href="/setup">
+                    <Building2 className="w-4 h-4 mr-2" />
+                    Set Up Company
+                  </Link>
+                </Button>
+                <div className="text-sm text-gray-500">
+                  <p>Or try the automatic setup:</p>
+                  <Button variant="outline" asChild className="mt-2">
+                    <Link href="/debug/production-setup">Auto Setup</Link>
+                  </Button>
+                </div>
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -434,5 +445,40 @@ export default function Dashboard() {
         </Tabs>
       </div>
     </div>
+  )
+}
+
+// Error boundary component
+function AuthErrorBoundary({ children }: { children: React.ReactNode }) {
+  const [hasError, setHasError] = useState(false)
+
+  useEffect(() => {
+    const handleError = () => setHasError(true)
+    window.addEventListener("error", handleError)
+    return () => window.removeEventListener("error", handleError)
+  }, [])
+
+  if (hasError) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-center">
+          <AlertTriangle className="h-16 w-16 text-red-500 mx-auto mb-4" />
+          <h2 className="text-xl font-semibold mb-2">Authentication Error</h2>
+          <p className="text-gray-600 mb-4">There was a problem with the authentication system.</p>
+          <Button onClick={() => window.location.reload()}>Reload Page</Button>
+        </div>
+      </div>
+    )
+  }
+
+  return <>{children}</>
+}
+
+// Main dashboard component with error boundary
+export default function Dashboard() {
+  return (
+    <AuthErrorBoundary>
+      <DashboardContent />
+    </AuthErrorBoundary>
   )
 }
