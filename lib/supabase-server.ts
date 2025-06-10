@@ -1,52 +1,36 @@
-import { createServerClient, type CookieOptions } from "@supabase/ssr"
+import { createServerClient } from "@supabase/ssr"
 import { cookies } from "next/headers"
-
-// Cache for server client instances per request
-const serverClientCache = new Map<string, any>()
 
 export async function createClient() {
   const cookieStore = await cookies()
 
-  // Create a cache key based on cookies to ensure we reuse clients within the same request
-  const cookieString = cookieStore.toString()
+  // Ensure environment variables are available
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
-  if (serverClientCache.has(cookieString)) {
-    return serverClientCache.get(cookieString)
+  if (!supabaseUrl || !supabaseAnonKey) {
+    throw new Error("Missing Supabase environment variables")
   }
 
-  const client = createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
+  const client = createServerClient(supabaseUrl, supabaseAnonKey, {
     cookies: {
-      get(name: string) {
-        return cookieStore.get(name)?.value
+      getAll() {
+        return cookieStore.getAll()
       },
-      set(name: string, value: string, options: CookieOptions) {
+      setAll(cookiesToSet) {
         try {
-          cookieStore.set({ name, value, ...options })
+          cookiesToSet.forEach(({ name, value, options }) => {
+            cookieStore.set(name, value, options)
+          })
         } catch (error) {
-          // The `set` method was called from a Server Component.
+          // The `setAll` method was called from a Server Component.
           // This can be ignored if you have middleware refreshing
           // user sessions.
-        }
-      },
-      remove(name: string, options: CookieOptions) {
-        try {
-          cookieStore.set({ name, value: "", ...options })
-        } catch (error) {
-          // The `delete` method was called from a Server Component.
-          // This can be ignored if you have middleware refreshing
-          // user sessions.
+          console.log("Cookie set error (can be ignored):", error)
         }
       },
     },
   })
-
-  // Cache the client for this request
-  serverClientCache.set(cookieString, client)
-
-  // Clean up cache after a reasonable time to prevent memory leaks
-  setTimeout(() => {
-    serverClientCache.delete(cookieString)
-  }, 60000) // 1 minute
 
   return client
 }

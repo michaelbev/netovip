@@ -1,8 +1,8 @@
 "use client"
 
 import type React from "react"
-import { createContext, useContext, useEffect, useState } from "react"
-import { supabase } from "@/lib/supabase"
+import { createContext, useContext, useEffect, useState, useRef } from "react"
+import { supabase } from "@/lib/supabase" // Import the singleton instance directly
 import type { User, Session } from "@supabase/supabase-js"
 
 interface AuthContextType {
@@ -20,57 +20,103 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [session, setSession] = useState<Session | null>(null)
   const [loading, setLoading] = useState(true)
+  const [initialized, setInitialized] = useState(false)
+
+  // Prevent multiple simultaneous auth calls
+  const authCallInProgress = useRef(false)
+  const mountedRef = useRef(true)
+  const subscriptionRef = useRef<any>(null)
 
   useEffect(() => {
-    let mounted = true
+    mountedRef.current = true
 
-    // Get initial session
-    const getInitialSession = async () => {
+    // Prevent multiple initialization calls
+    if (initialized || authCallInProgress.current) {
+      return
+    }
+
+    const initializeAuth = async () => {
+      if (authCallInProgress.current) return
+
+      authCallInProgress.current = true
+
       try {
+        console.log("Initializing auth...")
+
+        // Get initial session without triggering auth state change
         const {
           data: { session },
           error,
         } = await supabase.auth.getSession()
 
-        if (!mounted) return
+        if (!mountedRef.current) return
 
         if (error) {
-          console.error("Error getting session:", error)
+          console.error("Error getting initial session:", error)
         } else {
+          console.log("Initial session:", session?.user?.email || "No user")
           setSession(session)
           setUser(session?.user ?? null)
         }
+
+        setInitialized(true)
       } catch (error) {
-        console.error("Error in getInitialSession:", error)
+        console.error("Error in initializeAuth:", error)
       } finally {
-        if (mounted) {
+        if (mountedRef.current) {
           setLoading(false)
+          authCallInProgress.current = false
         }
       }
     }
 
-    getInitialSession()
+    // Set up auth state listener only once
+    if (!subscriptionRef.current) {
+      console.log("Setting up auth state listener...")
 
-    // Listen for auth changes
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (!mounted) return
+      const {
+        data: { subscription },
+      } = supabase.auth.onAuthStateChange(async (event, session) => {
+        if (!mountedRef.current) return
 
-      console.log("Auth state changed:", event, session?.user?.email)
-      setSession(session)
-      setUser(session?.user ?? null)
-      setLoading(false)
-    })
+        console.log("Auth state changed:", event, session?.user?.email || "No user")
+
+        setSession(session)
+        setUser(session?.user ?? null)
+
+        if (!initialized) {
+          setInitialized(true)
+        }
+
+        setLoading(false)
+      })
+
+      subscriptionRef.current = subscription
+    }
+
+    // Initialize auth after setting up listener
+    initializeAuth()
 
     return () => {
-      mounted = false
-      subscription.unsubscribe()
+      mountedRef.current = false
+      if (subscriptionRef.current) {
+        console.log("Cleaning up auth subscription...")
+        subscriptionRef.current.unsubscribe()
+        subscriptionRef.current = null
+      }
     }
-  }, [])
+  }, []) // Remove initialized from dependencies to prevent re-initialization
 
   const signIn = async (email: string, password: string) => {
+    if (authCallInProgress.current) {
+      return { error: new Error("Authentication in progress") }
+    }
+
+    authCallInProgress.current = true
+
     try {
+      console.log("Signing in user:", email)
+
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
@@ -86,11 +132,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch (error) {
       console.error("Sign in exception:", error)
       return { error }
+    } finally {
+      authCallInProgress.current = false
     }
   }
 
   const signUp = async (email: string, password: string) => {
+    if (authCallInProgress.current) {
+      return { error: new Error("Authentication in progress") }
+    }
+
+    authCallInProgress.current = true
+
     try {
+      console.log("Signing up user:", email)
+
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
@@ -106,11 +162,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch (error) {
       console.error("Sign up exception:", error)
       return { error }
+    } finally {
+      authCallInProgress.current = false
     }
   }
 
   const signOut = async () => {
+    if (authCallInProgress.current) return
+
+    authCallInProgress.current = true
+
     try {
+      console.log("Signing out user...")
+
       const { error } = await supabase.auth.signOut()
       if (error) {
         console.error("Sign out error:", error)
@@ -119,6 +183,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     } catch (error) {
       console.error("Sign out exception:", error)
+    } finally {
+      authCallInProgress.current = false
     }
   }
 

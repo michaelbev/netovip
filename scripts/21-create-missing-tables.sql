@@ -52,10 +52,9 @@ CREATE TABLE IF NOT EXISTS distribution_details (
     distribution_id UUID NOT NULL REFERENCES distributions(id) ON DELETE CASCADE,
     owner_id UUID NOT NULL REFERENCES owners(id) ON DELETE CASCADE,
     amount DECIMAL(15,2) NOT NULL,
-    percentage DECIMAL(5,4) NOT NULL,
+    percentage numeric(10, 6) NOT NULL,
     status VARCHAR(50) DEFAULT 'pending',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
 
 -- Create indexes for better performance
 CREATE INDEX IF NOT EXISTS idx_expenses_company_id ON expenses(company_id);
