@@ -39,7 +39,7 @@ import {
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 
 export default function WellsPage() {
-  const { wells, loading, error } = useWells()
+  const { data: wells = [], loading, error } = useWells()
   const { toast } = useToast()
   const [searchTerm, setSearchTerm] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
@@ -57,9 +57,11 @@ export default function WellsPage() {
     total_depth: "",
   })
 
-  const filteredWells = wells.filter((well) => {
+  // Safe filtering with fallback to empty array
+  const safeWells = Array.isArray(wells) ? wells : []
+  const filteredWells = safeWells.filter((well) => {
     const matchesSearch =
-      well.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      well.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       well.api_number?.toLowerCase().includes(searchTerm.toLowerCase())
     const matchesStatus = statusFilter === "all" || well.status === statusFilter
     return matchesSearch && matchesStatus
@@ -130,6 +132,40 @@ export default function WellsPage() {
       default:
         return <Droplets className="h-4 w-4 text-gray-600" />
     }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex flex-col">
+        <PageHeader
+          title="Wells Management"
+          description="Manage your oil & gas wells and production assets"
+          breadcrumbs={[{ title: "Operations", href: "/" }, { title: "Wells" }]}
+        />
+        <div className="flex-1 space-y-4 p-4">
+          <div className="text-center py-12">
+            <p>Loading wells data...</p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col">
+        <PageHeader
+          title="Wells Management"
+          description="Manage your oil & gas wells and production assets"
+          breadcrumbs={[{ title: "Operations", href: "/" }, { title: "Wells" }]}
+        />
+        <div className="flex-1 space-y-4 p-4">
+          <div className="text-center py-12">
+            <p className="text-red-600">Error loading wells data: {error}</p>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -390,9 +426,9 @@ export default function WellsPage() {
                   <Droplets className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">{wells.length}</div>
+                  <div className="text-2xl font-bold">{safeWells.length}</div>
                   <p className="text-xs text-muted-foreground">
-                    {wells.filter((w) => w.status === "active").length} active
+                    {safeWells.filter((w) => w.status === "active").length} active
                   </p>
                 </CardContent>
               </Card>

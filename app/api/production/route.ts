@@ -1,6 +1,9 @@
 import { createClient } from "@/lib/supabase-server"
 import { NextResponse } from "next/server"
 
+// Force dynamic rendering for this route
+export const dynamic = "force-dynamic"
+
 export async function GET() {
   try {
     console.log("=== Production API Called ===")
