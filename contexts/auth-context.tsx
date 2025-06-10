@@ -27,6 +27,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const mountedRef = useRef(true)
   const subscriptionRef = useRef<any>(null)
 
+  // Development mode flag
+  const isDev = process.env.NODE_ENV === "development"
+
   useEffect(() => {
     mountedRef.current = true
 
@@ -41,7 +44,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       authCallInProgress.current = true
 
       try {
-        console.log("Initializing auth...")
+        if (isDev) {
+          console.log("AuthProvider: Initializing auth...")
+        }
 
         // Get initial session without triggering auth state change
         const {
@@ -53,8 +58,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         if (error) {
           console.error("Error getting initial session:", error)
+          if (isDev) {
+            console.log("AuthProvider: Session error details:", {
+              message: error.message,
+              status: error.status,
+              name: error.name,
+            })
+          }
         } else {
-          console.log("Initial session:", session?.user?.email || "No user")
+          if (isDev) {
+            console.log("AuthProvider: Initial session:", session?.user?.email || "No user")
+          }
           setSession(session)
           setUser(session?.user ?? null)
         }
@@ -62,6 +76,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setInitialized(true)
       } catch (error) {
         console.error("Error in initializeAuth:", error)
+        if (isDev) {
+          console.log("AuthProvider: Initialization error details:", error)
+        }
       } finally {
         if (mountedRef.current) {
           setLoading(false)
@@ -72,14 +89,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     // Set up auth state listener only once
     if (!subscriptionRef.current) {
-      console.log("Setting up auth state listener...")
+      if (isDev) {
+        console.log("AuthProvider: Setting up auth state listener...")
+      }
 
       const {
         data: { subscription },
       } = supabase.auth.onAuthStateChange(async (event, session) => {
         if (!mountedRef.current) return
 
-        console.log("Auth state changed:", event, session?.user?.email || "No user")
+        if (isDev) {
+          console.log("AuthProvider: Auth state changed:", event, session?.user?.email || "No user")
+        }
 
         setSession(session)
         setUser(session?.user ?? null)
@@ -100,12 +121,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => {
       mountedRef.current = false
       if (subscriptionRef.current) {
-        console.log("Cleaning up auth subscription...")
+        if (isDev) {
+          console.log("AuthProvider: Cleaning up auth subscription...")
+        }
         subscriptionRef.current.unsubscribe()
         subscriptionRef.current = null
       }
     }
-  }, []) // Remove initialized from dependencies to prevent re-initialization
+  }, [isDev]) // Add isDev to dependencies
 
   const signIn = async (email: string, password: string) => {
     if (authCallInProgress.current) {
@@ -115,7 +138,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     authCallInProgress.current = true
 
     try {
-      console.log("Signing in user:", email)
+      if (isDev) {
+        console.log("AuthProvider: Signing in user:", email)
+      }
 
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
@@ -124,10 +149,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (error) {
         console.error("Sign in error:", error)
+        if (isDev) {
+          console.log("AuthProvider: Sign in error details:", {
+            message: error.message,
+            status: error.status,
+            name: error.name,
+          })
+        }
         return { error }
       }
 
-      console.log("Sign in successful:", data.user?.email)
+      if (isDev) {
+        console.log("AuthProvider: Sign in successful:", data.user?.email)
+      }
       return { error: null }
     } catch (error) {
       console.error("Sign in exception:", error)
@@ -145,7 +179,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     authCallInProgress.current = true
 
     try {
-      console.log("Signing up user:", email)
+      if (isDev) {
+        console.log("AuthProvider: Signing up user:", email)
+      }
 
       const { data, error } = await supabase.auth.signUp({
         email,
@@ -157,7 +193,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return { error }
       }
 
-      console.log("Sign up successful:", data.user?.email)
+      if (isDev) {
+        console.log("AuthProvider: Sign up successful:", data.user?.email)
+      }
       return { error: null }
     } catch (error) {
       console.error("Sign up exception:", error)
@@ -173,13 +211,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     authCallInProgress.current = true
 
     try {
-      console.log("Signing out user...")
+      if (isDev) {
+        console.log("AuthProvider: Signing out user...")
+      }
 
       const { error } = await supabase.auth.signOut()
       if (error) {
         console.error("Sign out error:", error)
-      } else {
-        console.log("Sign out successful")
+      } else if (isDev) {
+        console.log("AuthProvider: Sign out successful")
       }
     } catch (error) {
       console.error("Sign out exception:", error)

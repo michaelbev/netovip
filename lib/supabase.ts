@@ -25,26 +25,51 @@ export function getSupabaseClient() {
     isInitializing = true
 
     try {
-      supabaseInstance = createBrowserClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-        {
-          auth: {
-            // Reduce auth refresh frequency to prevent loops
-            autoRefreshToken: true,
-            persistSession: true,
-            detectSessionInUrl: false, // Prevent URL-based session detection loops
-            // Use a unique storage key to prevent conflicts
-            storageKey: "oil-gas-accounting-auth",
-          },
-          global: {
-            // Add request deduplication
-            headers: {
-              "X-Client-Info": "oil-gas-accounting@1.0.0",
-            },
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+      const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+      // Enhanced error checking for development
+      if (!supabaseUrl || !supabaseAnonKey) {
+        const isDev = process.env.NODE_ENV === "development"
+        const errorMsg = `Missing Supabase environment variables: ${!supabaseUrl ? "NEXT_PUBLIC_SUPABASE_URL " : ""}${!supabaseAnonKey ? "NEXT_PUBLIC_SUPABASE_ANON_KEY" : ""}`
+
+        if (isDev) {
+          console.error(errorMsg)
+          console.log(
+            "Available env vars:",
+            Object.keys(process.env).filter((key) => key.includes("SUPABASE")),
+          )
+        }
+
+        throw new Error(errorMsg)
+      }
+
+      supabaseInstance = createBrowserClient(supabaseUrl, supabaseAnonKey, {
+        auth: {
+          // Enhanced settings for development
+          autoRefreshToken: true,
+          persistSession: true,
+          detectSessionInUrl: true, // Enable for development to handle auth redirects
+          // Use a unique storage key to prevent conflicts
+          storageKey: "oil-gas-accounting-auth",
+          // Add debug mode for development
+          debug: process.env.NODE_ENV === "development",
+        },
+        global: {
+          // Add request deduplication
+          headers: {
+            "X-Client-Info": "oil-gas-accounting@1.0.0",
           },
         },
-      )
+      })
+
+      // Log successful initialization in development
+      if (process.env.NODE_ENV === "development") {
+        console.log("Supabase client initialized successfully")
+      }
+    } catch (error) {
+      console.error("Failed to initialize Supabase client:", error)
+      throw error
     } finally {
       isInitializing = false
     }
@@ -60,8 +85,6 @@ export const supabase = getSupabaseClient()
 export function createClient() {
   return getSupabaseClient()
 }
-
-// Also export as named export for direct import
 
 // Types for our database tables
 export interface Database {

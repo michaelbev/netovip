@@ -9,10 +9,31 @@ export async function middleware(request: NextRequest) {
     },
   })
 
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
+  // Check if we're in development mode
+  const isDev = process.env.NODE_ENV === "development"
+
+  // Get environment variables
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+  // Log environment info in development
+  if (isDev) {
+    console.log("Middleware - Environment:", {
+      NODE_ENV: process.env.NODE_ENV,
+      hasSupabaseUrl: !!supabaseUrl,
+      hasSupabaseKey: !!supabaseAnonKey,
+      url: request.url,
+    })
+  }
+
+  // Skip middleware if environment variables are missing
+  if (!supabaseUrl || !supabaseAnonKey) {
+    console.warn("Missing Supabase environment variables in middleware")
+    return response
+  }
+
+  try {
+    const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
       cookies: {
         getAll() {
           return request.cookies.getAll()
@@ -24,25 +45,35 @@ export async function middleware(request: NextRequest) {
               headers: request.headers,
             },
           })
-          cookiesToSet.forEach(({ name, value, options }) => response.cookies.set(name, value, options))
+          cookiesToSet.forEach(({ name, value, options }) => {
+            response.cookies.set(name, value, options)
+          })
         },
       },
-    },
-  )
+    })
 
-  // Refresh session if expired - required for Server Components
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+    // Refresh session if expired - required for Server Components
+    const {
+      data: { user },
+      error,
+    } = await supabase.auth.getUser()
 
-  // For debugging
-  if (user) {
-    console.log("Middleware: User authenticated:", user.email)
-  } else {
-    console.log("Middleware: No authenticated user")
+    // Enhanced logging for development
+    if (isDev) {
+      if (error) {
+        console.log("Middleware auth error:", error.message)
+      } else if (user) {
+        console.log("Middleware: User authenticated:", user.email)
+      } else {
+        console.log("Middleware: No authenticated user")
+      }
+    }
+
+    return response
+  } catch (error) {
+    console.error("Middleware error:", error)
+    return response
   }
-
-  return response
 }
 
 export const config = {

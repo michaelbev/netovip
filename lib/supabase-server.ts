@@ -9,7 +9,18 @@ export async function createClient() {
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
   if (!supabaseUrl || !supabaseAnonKey) {
-    throw new Error("Missing Supabase environment variables")
+    const isDev = process.env.NODE_ENV === "development"
+    const errorMsg = `Missing Supabase environment variables: ${!supabaseUrl ? "NEXT_PUBLIC_SUPABASE_URL " : ""}${!supabaseAnonKey ? "NEXT_PUBLIC_SUPABASE_ANON_KEY" : ""}`
+
+    if (isDev) {
+      console.error("Server-side Supabase client error:", errorMsg)
+      console.log(
+        "Available server env vars:",
+        Object.keys(process.env).filter((key) => key.includes("SUPABASE")),
+      )
+    }
+
+    throw new Error(errorMsg)
   }
 
   const client = createServerClient(supabaseUrl, supabaseAnonKey, {
@@ -26,7 +37,9 @@ export async function createClient() {
           // The `setAll` method was called from a Server Component.
           // This can be ignored if you have middleware refreshing
           // user sessions.
-          console.log("Cookie set error (can be ignored):", error)
+          if (process.env.NODE_ENV === "development") {
+            console.log("Cookie set error (can be ignored):", error)
+          }
         }
       },
     },

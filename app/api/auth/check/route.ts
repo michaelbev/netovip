@@ -19,17 +19,35 @@ export async function GET() {
           authenticated: false,
           needsSetup: true,
           error: "Not authenticated",
+          debug: {
+            authError: authError?.message,
+            hasUser: !!user,
+          },
         },
         { status: 401 },
       )
     }
 
-    // Check for profile and company association
+    // Check for profile and company association with detailed logging
     const { data: profile, error: profileError } = await supabase
       .from("profiles")
-      .select("company_id, role, full_name")
+      .select(`
+        id,
+        email,
+        full_name,
+        role,
+        company_id,
+        companies (
+          id,
+          name,
+          email
+        )
+      `)
       .eq("id", user.id)
       .single()
+
+    // Log the query for debugging
+    console.log("Profile query result:", { profile, profileError, userId: user.id })
 
     if (profileError) {
       // If profile doesn't exist, user needs setup
@@ -41,6 +59,10 @@ export async function GET() {
             id: user.id,
             email: user.email,
           },
+          debug: {
+            reason: "Profile not found",
+            profileError: profileError.message,
+          },
         })
       }
 
@@ -49,6 +71,10 @@ export async function GET() {
           authenticated: false,
           needsSetup: true,
           error: "Profile lookup failed",
+          debug: {
+            profileError: profileError.message,
+            profileErrorCode: profileError.code,
+          },
         },
         { status: 500 },
       )
@@ -67,7 +93,13 @@ export async function GET() {
           full_name: profile?.full_name,
           role: profile?.role,
           company_id: profile?.company_id,
+          company: profile?.companies,
         },
+      },
+      debug: {
+        hasProfile: !!profile,
+        hasCompany: !!profile?.company_id,
+        companyName: profile?.companies?.name,
       },
     })
   } catch (error: any) {
@@ -77,6 +109,10 @@ export async function GET() {
         authenticated: false,
         needsSetup: true,
         error: "Internal server error",
+        debug: {
+          errorMessage: error.message,
+          errorStack: process.env.NODE_ENV === "development" ? error.stack : undefined,
+        },
       },
       { status: 500 },
     )
