@@ -1,6 +1,13 @@
 import { createServerClient } from "@supabase/ssr"
 import { cookies } from "next/headers"
 
+console.log("Supabase ENV Vars:", {
+  NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+  SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
+  NODE_ENV: process.env.NODE_ENV,
+});
+
 export async function createClient() {
   const cookieStore = await cookies()
   console.log("Server cookies:", cookieStore.getAll())
@@ -26,34 +33,39 @@ export async function createClient() {
 
   const client = createServerClient(supabaseUrl, supabaseAnonKey, {
     cookies: {
-      getAll() {
-        return cookieStore.getAll().map(cookie => {
-          // Remove base64- prefix if present
-          if (cookie.name === 'oil-gas-accounting-auth' && cookie.value.startsWith('base64-')) {
-            return {
-              ...cookie,
-              value: cookie.value.replace('base64-', '')
-            }
-          }
-          return cookie
-        })
+      get(name: string) {
+        const cookie = cookieStore.get(name)
+        if (!cookie) return undefined
+        
+        // Remove base64- prefix if present
+        if (name === 'oil-gas-accounting-auth' && cookie.value.startsWith('base64-')) {
+          return cookie.value.replace('base64-', '')
+        }
+        return cookie.value
       },
-      setAll(cookiesToSet) {
+      set(name: string, value: string, options: any) {
         try {
-          cookiesToSet.forEach(({ name, value, options }) => {
-            // Add base64- prefix to auth cookie
-            if (name === 'oil-gas-accounting-auth') {
-              cookieStore.set(name, `base64-${value}`, options)
-            } else {
-              cookieStore.set(name, value, options)
-            }
-          })
+          // Add base64- prefix to auth cookie
+          if (name === 'oil-gas-accounting-auth') {
+            cookieStore.set(name, `base64-${value}`, options)
+          } else {
+            cookieStore.set(name, value, options)
+          }
         } catch (error) {
-          // The `setAll` method was called from a Server Component.
+          // The `set` method was called from a Server Component.
           // This can be ignored if you have middleware refreshing
           // user sessions.
           if (process.env.NODE_ENV === "development") {
             console.log("Cookie set error (can be ignored):", error)
+          }
+        }
+      },
+      remove(name: string, options: any) {
+        try {
+          cookieStore.delete(name)
+        } catch (error) {
+          if (process.env.NODE_ENV === "development") {
+            console.log("Cookie remove error (can be ignored):", error)
           }
         }
       },

@@ -35,6 +35,7 @@ import {
   Edit,
   Eye,
   Trash2,
+  Loader2,
 } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 
@@ -44,6 +45,7 @@ export default function WellsPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
   const [isDialogOpen, setIsDialogOpen] = useState(false)
+  const [isCreating, setIsCreating] = useState(false)
   const [newWell, setNewWell] = useState({
     name: "",
     api_number: "",
@@ -68,6 +70,16 @@ export default function WellsPage() {
   })
 
   const handleCreateWell = async () => {
+    if (!newWell.name || !newWell.api_number) {
+      toast({
+        title: "Validation Error",
+        description: "Well name and API number are required",
+        variant: "destructive",
+      })
+      return
+    }
+
+    setIsCreating(true)
     try {
       const response = await fetch("/api/wells", {
         method: "POST",
@@ -75,7 +87,10 @@ export default function WellsPage() {
         body: JSON.stringify(newWell),
       })
 
-      if (!response.ok) throw new Error("Failed to create well")
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || "Failed to create well")
+      }
 
       toast({
         title: "Well created",
@@ -101,19 +116,21 @@ export default function WellsPage() {
         description: error.message,
         variant: "destructive",
       })
+    } finally {
+      setIsCreating(false)
     }
   }
 
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "active":
-        return <Badge className="bg-green-500">Active</Badge>
+        return <Badge className="bg-green-500 hover:bg-green-600">Active</Badge>
       case "inactive":
-        return <Badge className="bg-yellow-500">Inactive</Badge>
+        return <Badge className="bg-yellow-500 hover:bg-yellow-600">Inactive</Badge>
       case "plugged":
-        return <Badge className="bg-red-500">Plugged</Badge>
+        return <Badge className="bg-red-500 hover:bg-red-600">Plugged</Badge>
       case "drilling":
-        return <Badge className="bg-blue-500">Drilling</Badge>
+        return <Badge className="bg-blue-500 hover:bg-blue-600">Drilling</Badge>
       default:
         return <Badge variant="secondary">{status}</Badge>
     }
@@ -136,15 +153,16 @@ export default function WellsPage() {
 
   if (loading) {
     return (
-      <div className="flex flex-col">
+      <div className="flex flex-col min-h-screen">
         <PageHeader
           title="Wells Management"
           description="Manage your oil & gas wells and production assets"
           breadcrumbs={[{ title: "Operations", href: "/" }, { title: "Wells" }]}
         />
-        <div className="flex-1 space-y-4 p-4">
-          <div className="text-center py-12">
-            <p>Loading wells data...</p>
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center space-y-4">
+            <Loader2 className="h-8 w-8 animate-spin mx-auto text-teal-600" />
+            <p className="text-muted-foreground">Loading wells data...</p>
           </div>
         </div>
       </div>
@@ -153,15 +171,24 @@ export default function WellsPage() {
 
   if (error) {
     return (
-      <div className="flex flex-col">
+      <div className="flex flex-col min-h-screen">
         <PageHeader
           title="Wells Management"
           description="Manage your oil & gas wells and production assets"
           breadcrumbs={[{ title: "Operations", href: "/" }, { title: "Wells" }]}
         />
-        <div className="flex-1 space-y-4 p-4">
-          <div className="text-center py-12">
-            <p className="text-red-600">Error loading wells data: {error}</p>
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center space-y-4">
+            <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto">
+              <Activity className="h-8 w-8 text-red-600" />
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-red-600">Error Loading Wells</h3>
+              <p className="text-muted-foreground mt-2">{error}</p>
+              <Button onClick={() => window.location.reload()} className="mt-4" variant="outline">
+                Try Again
+              </Button>
+            </div>
           </div>
         </div>
       </div>
@@ -169,7 +196,7 @@ export default function WellsPage() {
   }
 
   return (
-    <div className="flex flex-col">
+    <div className="flex flex-col min-h-screen">
       <PageHeader
         title="Wells Management"
         description="Manage your oil & gas wells and production assets"
@@ -182,28 +209,30 @@ export default function WellsPage() {
               Add Well
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-2xl">
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Add New Well</DialogTitle>
               <DialogDescription>Create a new well record with location and operational details</DialogDescription>
             </DialogHeader>
-            <div className="grid grid-cols-2 gap-4 py-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 py-4">
               <div className="space-y-2">
-                <Label htmlFor="name">Well Name</Label>
+                <Label htmlFor="name">Well Name *</Label>
                 <Input
                   id="name"
                   placeholder="Eagle Ford #23"
                   value={newWell.name}
                   onChange={(e) => setNewWell({ ...newWell, name: e.target.value })}
+                  required
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="api">API Number</Label>
+                <Label htmlFor="api">API Number *</Label>
                 <Input
                   id="api"
                   placeholder="42-123-45678"
                   value={newWell.api_number}
                   onChange={(e) => setNewWell({ ...newWell, api_number: e.target.value })}
+                  required
                 />
               </div>
               <div className="space-y-2">
@@ -237,6 +266,8 @@ export default function WellsPage() {
                     <SelectItem value="NM">New Mexico</SelectItem>
                     <SelectItem value="CO">Colorado</SelectItem>
                     <SelectItem value="WY">Wyoming</SelectItem>
+                    <SelectItem value="CA">California</SelectItem>
+                    <SelectItem value="LA">Louisiana</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -258,6 +289,20 @@ export default function WellsPage() {
                 </Select>
               </div>
               <div className="space-y-2">
+                <Label htmlFor="status">Status</Label>
+                <Select value={newWell.status} onValueChange={(value) => setNewWell({ ...newWell, status: value })}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="inactive">Inactive</SelectItem>
+                    <SelectItem value="drilling">Drilling</SelectItem>
+                    <SelectItem value="plugged">Plugged</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
                 <Label htmlFor="spud_date">Spud Date</Label>
                 <Input
                   id="spud_date"
@@ -275,37 +320,56 @@ export default function WellsPage() {
                   onChange={(e) => setNewWell({ ...newWell, completion_date: e.target.value })}
                 />
               </div>
+              <div className="space-y-2">
+                <Label htmlFor="total_depth">Total Depth (ft)</Label>
+                <Input
+                  id="total_depth"
+                  type="number"
+                  placeholder="8500"
+                  value={newWell.total_depth}
+                  onChange={(e) => setNewWell({ ...newWell, total_depth: e.target.value })}
+                />
+              </div>
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
+              <Button variant="outline" onClick={() => setIsDialogOpen(false)} disabled={isCreating}>
                 Cancel
               </Button>
-              <Button onClick={handleCreateWell}>Create Well</Button>
+              <Button onClick={handleCreateWell} disabled={isCreating}>
+                {isCreating ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Creating...
+                  </>
+                ) : (
+                  "Create Well"
+                )}
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
       </PageHeader>
 
-      <div className="flex-1 space-y-4 p-4">
-        <Tabs defaultValue="list" className="space-y-4">
-          <div className="flex items-center justify-between">
-            <TabsList>
+      <div className="flex-1 space-y-6 p-6">
+        <Tabs defaultValue="list" className="space-y-6">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <TabsList className="grid w-full sm:w-auto grid-cols-3">
               <TabsTrigger value="list">List View</TabsTrigger>
               <TabsTrigger value="map">Map View</TabsTrigger>
               <TabsTrigger value="analytics">Analytics</TabsTrigger>
             </TabsList>
-            <div className="flex items-center space-x-2">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
               <div className="relative">
-                <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
                   placeholder="Search wells..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-8 w-64"
+                  className="pl-10 w-full sm:w-64"
                 />
               </div>
               <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-32">
+                <SelectTrigger className="w-full sm:w-40">
                   <Filter className="mr-2 h-4 w-4" />
                   <SelectValue />
                 </SelectTrigger>
@@ -320,106 +384,139 @@ export default function WellsPage() {
             </div>
           </div>
 
-          <TabsContent value="list" className="space-y-4">
+          <TabsContent value="list" className="space-y-6">
             <Card>
               <CardHeader>
-                <CardTitle>Wells ({filteredWells.length})</CardTitle>
+                <CardTitle className="flex items-center gap-2">
+                  <Droplets className="h-5 w-5 text-teal-600" />
+                  Wells ({filteredWells.length})
+                </CardTitle>
                 <CardDescription>Manage your well inventory and track operational status</CardDescription>
               </CardHeader>
               <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Well Name</TableHead>
-                      <TableHead>API Number</TableHead>
-                      <TableHead>Location</TableHead>
-                      <TableHead>Type</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Production</TableHead>
-                      <TableHead className="w-[50px]"></TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredWells.map((well) => (
-                      <TableRow key={well.id}>
-                        <TableCell className="font-medium">{well.name}</TableCell>
-                        <TableCell className="font-mono text-sm">{well.api_number}</TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-1">
-                            <MapPin className="h-3 w-3 text-muted-foreground" />
-                            <span className="text-sm">
-                              {well.county}, {well.state}
-                            </span>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            {getWellTypeIcon(well.well_type)}
-                            <span className="capitalize">{well.well_type}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell>{getStatusBadge(well.status)}</TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-1">
-                            <TrendingUp className="h-3 w-3 text-green-600" />
-                            <span className="text-sm">45.2 bbl/day</span>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="sm">
-                                <MoreHorizontal className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem>
-                                <Eye className="mr-2 h-4 w-4" />
-                                View Details
-                              </DropdownMenuItem>
-                              <DropdownMenuItem>
-                                <Edit className="mr-2 h-4 w-4" />
-                                Edit Well
-                              </DropdownMenuItem>
-                              <DropdownMenuItem>
-                                <Calendar className="mr-2 h-4 w-4" />
-                                Production Data
-                              </DropdownMenuItem>
-                              <DropdownMenuItem className="text-red-600">
-                                <Trash2 className="mr-2 h-4 w-4" />
-                                Delete
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                {filteredWells.length === 0 ? (
+                  <div className="text-center py-12">
+                    <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <Droplets className="h-8 w-8 text-gray-400" />
+                    </div>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2">No Wells Found</h3>
+                    <p className="text-gray-500 mb-4">
+                      {searchTerm || statusFilter !== "all"
+                        ? "No wells match your current filters."
+                        : "Get started by adding your first well."}
+                    </p>
+                    {!searchTerm && statusFilter === "all" && (
+                      <Button onClick={() => setIsDialogOpen(true)}>
+                        <Plus className="mr-2 h-4 w-4" />
+                        Add Your First Well
+                      </Button>
+                    )}
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Well Name</TableHead>
+                          <TableHead>API Number</TableHead>
+                          <TableHead>Location</TableHead>
+                          <TableHead>Type</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead>Production</TableHead>
+                          <TableHead className="w-[50px]"></TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {filteredWells.map((well) => (
+                          <TableRow key={well.id} className="hover:bg-muted/50">
+                            <TableCell className="font-medium">{well.name}</TableCell>
+                            <TableCell className="font-mono text-sm">{well.api_number}</TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-1">
+                                <MapPin className="h-3 w-3 text-muted-foreground" />
+                                <span className="text-sm">
+                                  {well.county && well.state ? `${well.county}, ${well.state}` : well.location || "N/A"}
+                                </span>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-2">
+                                {getWellTypeIcon(well.well_type)}
+                                <span className="capitalize">{well.well_type}</span>
+                              </div>
+                            </TableCell>
+                            <TableCell>{getStatusBadge(well.status)}</TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-1">
+                                <TrendingUp className="h-3 w-3 text-green-600" />
+                                <span className="text-sm">45.2 bbl/day</span>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button variant="ghost" size="sm">
+                                    <MoreHorizontal className="h-4 w-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuItem>
+                                    <Eye className="mr-2 h-4 w-4" />
+                                    View Details
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem>
+                                    <Edit className="mr-2 h-4 w-4" />
+                                    Edit Well
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem>
+                                    <Calendar className="mr-2 h-4 w-4" />
+                                    Production Data
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem className="text-red-600">
+                                    <Trash2 className="mr-2 h-4 w-4" />
+                                    Delete
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
 
-          <TabsContent value="map" className="space-y-4">
+          <TabsContent value="map" className="space-y-6">
             <Card>
               <CardHeader>
-                <CardTitle>Well Locations</CardTitle>
+                <CardTitle className="flex items-center gap-2">
+                  <MapPin className="h-5 w-5 text-teal-600" />
+                  Well Locations
+                </CardTitle>
                 <CardDescription>Geographic view of your well assets</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="h-96 bg-gray-100 rounded-lg flex items-center justify-center">
-                  <div className="text-center">
-                    <MapPin className="h-12 w-12 text-gray-400 mx-auto mb-2" />
-                    <p className="text-gray-500">Interactive map would be displayed here</p>
-                    <p className="text-sm text-gray-400">Integration with mapping service required</p>
+                <div className="h-96 bg-gradient-to-br from-blue-50 to-teal-50 rounded-lg flex items-center justify-center border-2 border-dashed border-gray-200">
+                  <div className="text-center space-y-4">
+                    <div className="w-16 h-16 bg-teal-100 rounded-full flex items-center justify-center mx-auto">
+                      <MapPin className="h-8 w-8 text-teal-600" />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-semibold text-gray-900">Interactive Map Coming Soon</h3>
+                      <p className="text-gray-500 mt-2">Geographic visualization of your well locations</p>
+                      <p className="text-sm text-gray-400 mt-1">Integration with mapping service in development</p>
+                    </div>
                   </div>
                 </div>
               </CardContent>
             </Card>
           </TabsContent>
 
-          <TabsContent value="analytics" className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <TabsContent value="analytics" className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                   <CardTitle className="text-sm font-medium">Total Wells</CardTitle>
@@ -428,7 +525,7 @@ export default function WellsPage() {
                 <CardContent>
                   <div className="text-2xl font-bold">{safeWells.length}</div>
                   <p className="text-xs text-muted-foreground">
-                    {safeWells.filter((w) => w.status === "active").length} active
+                    {safeWells.filter((w) => w.status === "active").length} active wells
                   </p>
                 </CardContent>
               </Card>
@@ -439,7 +536,7 @@ export default function WellsPage() {
                 </CardHeader>
                 <CardContent>
                   <div className="text-2xl font-bold">42.3</div>
-                  <p className="text-xs text-muted-foreground">bbl/day per well</p>
+                  <p className="text-xs text-muted-foreground">barrels per day per well</p>
                 </CardContent>
               </Card>
               <Card>
@@ -449,7 +546,59 @@ export default function WellsPage() {
                 </CardHeader>
                 <CardContent>
                   <div className="text-2xl font-bold">156,420</div>
-                  <p className="text-xs text-muted-foreground">feet drilled</p>
+                  <p className="text-xs text-muted-foreground">feet drilled total</p>
+                </CardContent>
+              </Card>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Well Status Distribution</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    {["active", "inactive", "drilling", "plugged"].map((status) => {
+                      const count = safeWells.filter((w) => w.status === status).length
+                      const percentage = safeWells.length > 0 ? (count / safeWells.length) * 100 : 0
+                      return (
+                        <div key={status} className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            {getStatusBadge(status)}
+                            <span className="text-sm capitalize">{status}</span>
+                          </div>
+                          <div className="text-sm text-muted-foreground">
+                            {count} ({percentage.toFixed(1)}%)
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Well Type Distribution</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    {["oil", "gas", "injection", "water"].map((type) => {
+                      const count = safeWells.filter((w) => w.well_type === type).length
+                      const percentage = safeWells.length > 0 ? (count / safeWells.length) * 100 : 0
+                      return (
+                        <div key={type} className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            {getWellTypeIcon(type)}
+                            <span className="text-sm capitalize">{type}</span>
+                          </div>
+                          <div className="text-sm text-muted-foreground">
+                            {count} ({percentage.toFixed(1)}%)
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
                 </CardContent>
               </Card>
             </div>

@@ -1,12 +1,14 @@
 import { createClient } from "@/lib/supabase-server"
 import { NextResponse } from "next/server"
+import { cookies } from "next/headers"
 
 // Force dynamic rendering for this route
 export const dynamic = "force-dynamic"
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
     console.log("=== Wells API Called ===")
+    console.log("Request cookies:", cookies().getAll())
 
     const supabase = await createClient()
 
@@ -22,6 +24,7 @@ export async function GET() {
         const result = await supabase.auth.getUser()
         user = result.data.user
         userError = result.error
+        console.log("Supabase getUser() result:", result)
         break
       } catch (error: any) {
         console.log(`Auth attempt failed, retries left: ${retries - 1}`, error.message)
@@ -118,8 +121,10 @@ export async function GET() {
       )
     }
 
+    // Before the wells query loop
+    let wells = null, wellsError = null;
+
     // Get wells for the company with retry logic
-    let wells, wellsError
     retries = 3
 
     while (retries > 0) {
