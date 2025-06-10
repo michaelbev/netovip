@@ -1,10 +1,13 @@
 import { NextResponse } from "next/server"
 import { cookies } from "next/headers"
 
+// Force dynamic rendering
+export const dynamic = "force-dynamic"
+
 export async function GET() {
   try {
     // Get all cookies
-    const cookieStore = cookies()
+    const cookieStore = await cookies()
     const allCookies = cookieStore.getAll().map((c) => ({
       name: c.name,
       value: c.name.includes("supabase") ? "[REDACTED]" : c.value.substring(0, 10) + "...",

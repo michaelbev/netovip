@@ -4,9 +4,9 @@ import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { useAuth } from "@/contexts/auth-context"
+import { useAuth } from "@/contexts/auth-context-mock"
 import { supabase } from "@/lib/supabase"
-import { CheckCircle, XCircle, AlertCircle, RefreshCw, Settings } from "lucide-react"
+import { CheckCircle, XCircle, AlertCircle, RefreshCw } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 
 export default function DevAuthDebug() {
@@ -102,11 +102,19 @@ export default function DevAuthDebug() {
   return (
     <div className="container mx-auto p-6 space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold">Development Auth Debug</h1>
+        <h1 className="text-3xl font-bold">Development Auth Debug (Demo Mode)</h1>
         <Button onClick={handleRefresh} disabled={refreshing}>
           <RefreshCw className={`w-4 h-4 mr-2 ${refreshing ? "animate-spin" : ""}`} />
           Refresh
         </Button>
+      </div>
+
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+        <div className="flex items-center gap-2">
+          <AlertCircle className="w-5 h-5 text-blue-600" />
+          <span className="font-medium text-blue-800">Demo Mode Active</span>
+        </div>
+        <p className="text-blue-700 mt-1">This page is using mock authentication for demonstration purposes.</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -122,38 +130,15 @@ export default function DevAuthDebug() {
               <Badge variant="outline">{environment}</Badge>
             </div>
             <div className="flex justify-between items-center">
-              <span>Supabase URL:</span>
-              {supabaseUrl ? (
-                <CheckCircle className="w-5 h-5 text-green-600" />
-              ) : (
-                <XCircle className="w-5 h-5 text-red-600" />
-              )}
-              <span className="text-sm text-gray-600">{supabaseUrl ? "✓ Set" : "✗ Missing"}</span>
+              <span>Demo Mode:</span>
+              <CheckCircle className="w-5 h-5 text-green-600" />
+              <span className="text-sm text-gray-600">✓ Active</span>
             </div>
             <div className="flex justify-between items-center">
-              <span>Supabase Key:</span>
-              {supabaseKey ? (
-                <CheckCircle className="w-5 h-5 text-green-600" />
-              ) : (
-                <XCircle className="w-5 h-5 text-red-600" />
-              )}
-              <span className="text-sm text-gray-600">{supabaseKey ? "✓ Set" : "✗ Missing"}</span>
+              <span>Mock Auth:</span>
+              <CheckCircle className="w-5 h-5 text-green-600" />
+              <span className="text-sm text-gray-600">✓ Enabled</span>
             </div>
-            <div className="flex justify-between items-center">
-              <span>Client Initialized:</span>
-              {supabase ? (
-                <CheckCircle className="w-5 h-5 text-green-600" />
-              ) : (
-                <XCircle className="w-5 h-5 text-red-600" />
-              )}
-              <span className="text-sm text-gray-600">{supabase ? "✓ Yes" : "✗ No"}</span>
-            </div>
-            {supabaseUrl && (
-              <div className="mt-4">
-                <span className="text-sm font-medium">URL:</span>
-                <div className="mt-1 p-2 bg-gray-100 rounded text-sm font-mono break-all">{supabaseUrl}</div>
-              </div>
-            )}
           </CardContent>
         </Card>
 
@@ -162,14 +147,16 @@ export default function DevAuthDebug() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               {user ? <CheckCircle className="w-5 h-5 text-green-600" /> : <XCircle className="w-5 h-5 text-red-600" />}
-              Authentication Status
+              Authentication Status (Mock)
             </CardTitle>
-            <CardDescription>Current user session information</CardDescription>
+            <CardDescription>Current demo user session information</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="flex justify-between items-center">
               <span>Status:</span>
-              <Badge variant={user ? "default" : "destructive"}>{user ? "Authenticated" : "Not Authenticated"}</Badge>
+              <Badge variant={user ? "default" : "destructive"}>
+                {user ? "Authenticated (Demo)" : "Not Authenticated"}
+              </Badge>
             </div>
             {user && (
               <>
@@ -193,73 +180,39 @@ export default function DevAuthDebug() {
         </Card>
       </div>
 
-      {/* Auth Check Results */}
-      {authCheckResult && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Auth Check Results</CardTitle>
-            <CardDescription>Results from /api/auth/check endpoint</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              <div className="flex justify-between items-center">
-                <span>Authenticated:</span>
-                <Badge variant={authCheckResult.authenticated ? "default" : "destructive"}>
-                  {authCheckResult.authenticated ? "Yes" : "No"}
-                </Badge>
-              </div>
-              <div className="flex justify-between items-center">
-                <span>Needs Setup:</span>
-                <Badge variant={authCheckResult.needsSetup ? "destructive" : "default"}>
-                  {authCheckResult.needsSetup ? "Yes" : "No"}
-                </Badge>
-              </div>
-              {authCheckResult.debug && (
-                <div className="mt-4">
-                  <span className="text-sm font-medium">Debug Info:</span>
-                  <pre className="mt-1 p-2 bg-gray-100 rounded text-xs overflow-auto">
-                    {JSON.stringify(authCheckResult.debug, null, 2)}
-                  </pre>
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
       {/* Actions */}
       <Card>
         <CardHeader>
-          <CardTitle>Actions</CardTitle>
-          <CardDescription>Test authentication functions</CardDescription>
+          <CardTitle>Demo Actions</CardTitle>
+          <CardDescription>Test demo authentication functions</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
-          {authCheckResult?.needsSetup && (
-            <Button onClick={handleQuickSetup} disabled={settingUp} className="w-full" variant="default">
-              <Settings className="w-4 h-4 mr-2" />
-              {settingUp ? "Setting up..." : "Quick Setup (Create Profile & Company)"}
-            </Button>
-          )}
           <Button onClick={testLogin} variant="outline" className="w-full">
-            Test Login (Pre-filled Credentials)
+            Test Mock Login
           </Button>
           {user && (
             <Button onClick={signOut} variant="outline" className="w-full">
-              Sign Out
+              Mock Sign Out (Stays Signed In)
             </Button>
           )}
         </CardContent>
       </Card>
 
-      {/* Cookies */}
+      {/* Demo Info */}
       <Card>
         <CardHeader>
-          <CardTitle>Cookies</CardTitle>
-          <CardDescription>Current browser cookies</CardDescription>
+          <CardTitle>Demo Information</CardTitle>
+          <CardDescription>Current demo session details</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="p-2 bg-gray-100 rounded text-xs font-mono break-all max-h-32 overflow-auto">
-            {cookies || "No cookies found"}
+            Demo Mode: All authentication is mocked for presentation purposes.
+            <br />
+            User: {user?.email || "Not loaded"}
+            <br />
+            Company: Demo Oil & Gas Company
+            <br />
+            Role: Administrator
           </div>
         </CardContent>
       </Card>
