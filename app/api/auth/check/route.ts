@@ -1,13 +1,10 @@
 import { createClient } from "@/lib/supabase-server"
 import { NextResponse } from "next/server"
 
-// Force dynamic rendering for this route
-export const dynamic = "force-dynamic"
-
 export async function GET() {
-  try {
-    const supabase = await createClient()
+  const supabase = createClient()
 
+  try {
     const {
       data: { user },
       error: authError,
@@ -17,27 +14,18 @@ export async function GET() {
       return NextResponse.json(
         {
           authenticated: false,
-          needsSetup: true,
           error: "Not authenticated",
-          debug: {
-            authError: authError?.message,
-            hasUser: !!user,
-          },
         },
         { status: 401 },
       )
     }
 
-    // Check for profile and company association with detailed logging
+    // Get user profile
     const { data: profile, error: profileError } = await supabase
       .from("profiles")
       .select(`
-        id,
-        email,
-        full_name,
-        role,
-        company_id,
-        companies (
+        *,
+        companies:company_id(
           id,
           name,
           email
@@ -46,73 +34,61 @@ export async function GET() {
       .eq("id", user.id)
       .single()
 
-    // Log the query for debugging
-    console.log("Profile query result:", { profile, profileError, userId: user.id })
-
     if (profileError) {
-      // If profile doesn't exist, user needs setup
+      console.error("Profile error:", profileError)
+
+      // If profile doesn't exist, create one
       if (profileError.code === "PGRST116") {
+        const { data: newProfile, error: createError } = await supabase
+          .from("profiles")
+          .insert({
+            id: user.id,
+            email: user.email!,
+            full_name: user.user_metadata?.full_name || null,
+            role: "operator",
+          })
+          .select()
+          .single()
+
+        if (createError) {
+          return NextResponse.json({
+            authenticated: true,
+            user: user,
+            profile: null,
+            needsSetup: true,
+            error: "Failed to create profile",
+          })
+        }
+
         return NextResponse.json({
           authenticated: true,
+          user: user,
+          profile: newProfile,
           needsSetup: true,
-          user: {
-            id: user.id,
-            email: user.email,
-          },
-          debug: {
-            reason: "Profile not found",
-            profileError: profileError.message,
-          },
         })
       }
 
-      return NextResponse.json(
-        {
-          authenticated: false,
-          needsSetup: true,
-          error: "Profile lookup failed",
-          debug: {
-            profileError: profileError.message,
-            profileErrorCode: profileError.code,
-          },
-        },
-        { status: 500 },
-      )
+      return NextResponse.json({
+        authenticated: true,
+        user: user,
+        profile: null,
+        needsSetup: true,
+        error: profileError.message,
+      })
     }
-
-    // Check if user has company association
-    const needsSetup = !profile?.company_id
 
     return NextResponse.json({
       authenticated: true,
-      needsSetup,
-      user: {
-        id: user.id,
-        email: user.email,
-        profile: {
-          full_name: profile?.full_name,
-          role: profile?.role,
-          company_id: profile?.company_id,
-          company: profile?.companies,
-        },
-      },
-      debug: {
-        hasProfile: !!profile,
-        hasCompany: !!profile?.company_id,
-        companyName: profile?.companies?.name,
-      },
+      user: user,
+      profile: profile,
+      needsSetup: !profile.company_id,
     })
   } catch (error: any) {
     console.error("Auth check error:", error)
     return NextResponse.json(
       {
         authenticated: false,
-        needsSetup: true,
-        error: "Internal server error",
-        debug: {
-          errorMessage: error.message,
-          errorStack: process.env.NODE_ENV === "development" ? error.stack : undefined,
-        },
+        error: error.message,
       },
       { status: 500 },
     )

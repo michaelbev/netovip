@@ -1,9 +1,7 @@
 "use client"
 
-import type React from "react"
-
 import { useState, useEffect } from "react"
-import { useAuth } from "@/contexts/auth-context"
+import { supabase } from "@/lib/supabase"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -11,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Progress } from "@/components/ui/progress"
 import { PageHeader } from "@/components/page-header"
-import { useWells, useRevenue } from "@/hooks/use-supabase-data"
+import { useDashboardStats } from "@/hooks/use-supabase-data"
 import {
   BarChart3,
   TrendingUp,
@@ -19,6 +17,7 @@ import {
   DollarSign,
   Droplets,
   Users,
+  FileText,
   Plus,
   Eye,
   Edit,
@@ -26,83 +25,34 @@ import {
   AlertTriangle,
   CheckCircle,
   Building2,
-  Loader2,
 } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
 
-// Create a wrapper component that handles auth context safely
-function DashboardContent() {
-  const { user, loading: authLoading } = useAuth()
-  const router = useRouter()
+export default function Dashboard() {
   const [needsSetup, setNeedsSetup] = useState(false)
-  const [checkingSetup, setCheckingSetup] = useState(true)
-  const { wells, loading: wellsLoading, error: wellsError } = useWells()
-  const { revenue, loading: revenueLoading, error: revenueError } = useRevenue()
-
-  const loading = authLoading || wellsLoading || revenueLoading
-  const error = wellsError || revenueError
-
-  // Calculate stats from actual data
-  const stats = {
-    totalRevenue: revenue?.reduce((sum, r) => sum + (r.amount || 0), 0) || 0,
-    totalExpenses: 1245800, // Mock data for now
-    activeWells: wells?.filter((w) => w.status === "active")?.length || 0,
-    totalOwners: 156, // Mock data for now
-    pendingDistributions: 12, // Mock data for now
-  }
+  const { stats, loading } = useDashboardStats()
 
   useEffect(() => {
     const checkSetup = async () => {
-      if (authLoading) return
-
-      if (!user) {
-        router.push("/login")
-        return
-      }
-
       try {
-        setCheckingSetup(true)
-        const response = await fetch("/api/auth/check", {
-          credentials: "include",
-        })
+        const {
+          data: { user },
+        } = await supabase.auth.getUser()
+        if (user) {
+          const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", user.id).single()
 
-        if (response.ok) {
-          const data = await response.json()
-          setNeedsSetup(data.needsSetup || false)
-        } else {
-          // If auth check fails, assume needs setup
-          setNeedsSetup(true)
+          if (!profile?.company_id) {
+            setNeedsSetup(true)
+          }
         }
       } catch (error) {
         console.error("Setup check error:", error)
-        setNeedsSetup(true)
-      } finally {
-        setCheckingSetup(false)
       }
     }
 
     checkSetup()
-  }, [user, authLoading, router])
-
-  // Show loading while checking auth or setup
-  if (authLoading || checkingSetup) {
-    return (
-      <div className="flex items-center justify-center h-screen">
-        <div className="text-center">
-          <Loader2 className="h-8 w-8 animate-spin text-teal-600 mx-auto mb-2" />
-          <p className="text-gray-600">Loading...</p>
-        </div>
-      </div>
-    )
-  }
-
-  // Redirect to login if not authenticated
-  if (!user) {
-    router.push("/login")
-    return null
-  }
+  }, [])
 
   if (needsSetup) {
     return (
@@ -118,20 +68,12 @@ function DashboardContent() {
               <Building2 className="w-16 h-16 text-gray-400 mx-auto mb-4" />
               <h3 className="text-lg font-medium mb-2">Company Setup Required</h3>
               <p className="text-gray-600 mb-4">Please complete your company setup to access the dashboard</p>
-              <div className="space-y-2">
-                <Button asChild>
-                  <Link href="/setup">
-                    <Building2 className="w-4 h-4 mr-2" />
-                    Set Up Company
-                  </Link>
-                </Button>
-                <div className="text-sm text-gray-500">
-                  <p>Or try the automatic setup:</p>
-                  <Button variant="outline" asChild className="mt-2">
-                    <Link href="/debug/production-setup">Auto Setup</Link>
-                  </Button>
-                </div>
-              </div>
+              <Button asChild>
+                <Link href="/setup">
+                  <Building2 className="w-4 h-4 mr-2" />
+                  Set Up Company
+                </Link>
+              </Button>
             </CardContent>
           </Card>
         </div>
@@ -164,43 +106,19 @@ function DashboardContent() {
     }).format(amount)
   }
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-screen">
-        <div className="text-center">
-          <Loader2 className="h-8 w-8 animate-spin text-teal-600 mx-auto mb-2" />
-          <p className="text-gray-600">Loading dashboard data...</p>
-        </div>
-      </div>
-    )
-  }
-
-  if (error) {
-    return (
-      <div className="flex flex-col p-4">
-        <PageHeader title="Dashboard Error" description="There was a problem loading your dashboard">
-          <Button onClick={() => window.location.reload()}>Try Again</Button>
-        </PageHeader>
-        <Card className="mt-4 border-red-200">
-          <CardHeader>
-            <CardTitle className="text-red-600">Error Loading Dashboard</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-red-600">{error}</p>
-            <p className="mt-4">Please try refreshing the page or contact support if the problem persists.</p>
-          </CardContent>
-        </Card>
-      </div>
-    )
-  }
-
   return (
     <div className="flex flex-col">
       <PageHeader title="Dashboard" description="Oil & Gas Operations Overview">
         <Button asChild>
-          <Link href="/wells">
+          <Link href="/revenue">
             <Plus className="w-4 h-4 mr-2" />
-            View Wells
+            New Transaction
+          </Link>
+        </Button>
+        <Button variant="outline" asChild>
+          <Link href="/reports">
+            <FileText className="w-4 h-4 mr-2" />
+            Generate Report
           </Link>
         </Button>
       </PageHeader>
@@ -275,10 +193,11 @@ function DashboardContent() {
 
         {/* Main Content Tabs */}
         <Tabs defaultValue="overview" className="space-y-4">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="wells">Wells</TabsTrigger>
             <TabsTrigger value="transactions">Transactions</TabsTrigger>
+            <TabsTrigger value="reports">Reports</TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview" className="space-y-4">
@@ -434,7 +353,13 @@ function DashboardContent() {
                     <Button asChild>
                       <Link href="/revenue">
                         <Plus className="w-4 h-4 mr-2" />
-                        View Revenue
+                        Add Revenue
+                      </Link>
+                    </Button>
+                    <Button variant="outline" asChild>
+                      <Link href="/expenses">
+                        <Plus className="w-4 h-4 mr-2" />
+                        Add Expense
                       </Link>
                     </Button>
                   </div>
@@ -442,43 +367,30 @@ function DashboardContent() {
               </CardContent>
             </Card>
           </TabsContent>
+
+          <TabsContent value="reports">
+            <Card>
+              <CardHeader>
+                <CardTitle>Reports & Analytics</CardTitle>
+                <CardDescription>Generate comprehensive reports for compliance and analysis</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="text-center py-12">
+                  <FileText className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                  <h3 className="text-lg font-medium mb-2">Reporting Suite</h3>
+                  <p className="text-gray-600 mb-4">Financial reports, compliance documents, and analytics</p>
+                  <Button asChild>
+                    <Link href="/reports">
+                      <FileText className="w-4 h-4 mr-2" />
+                      Generate Report
+                    </Link>
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
         </Tabs>
       </div>
     </div>
-  )
-}
-
-// Error boundary component
-function AuthErrorBoundary({ children }: { children: React.ReactNode }) {
-  const [hasError, setHasError] = useState(false)
-
-  useEffect(() => {
-    const handleError = () => setHasError(true)
-    window.addEventListener("error", handleError)
-    return () => window.removeEventListener("error", handleError)
-  }, [])
-
-  if (hasError) {
-    return (
-      <div className="flex items-center justify-center h-screen">
-        <div className="text-center">
-          <AlertTriangle className="h-16 w-16 text-red-500 mx-auto mb-4" />
-          <h2 className="text-xl font-semibold mb-2">Authentication Error</h2>
-          <p className="text-gray-600 mb-4">There was a problem with the authentication system.</p>
-          <Button onClick={() => window.location.reload()}>Reload Page</Button>
-        </div>
-      </div>
-    )
-  }
-
-  return <>{children}</>
-}
-
-// Main dashboard component with error boundary
-export default function Dashboard() {
-  return (
-    <AuthErrorBoundary>
-      <DashboardContent />
-    </AuthErrorBoundary>
   )
 }

@@ -38,7 +38,7 @@ import {
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 
 export default function RevenuePage() {
-  const { data: revenue = [], loading, error } = useRevenue()
+  const { revenue, loading, error } = useRevenue()
   const { toast } = useToast()
   const [searchTerm, setSearchTerm] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
@@ -110,46 +110,10 @@ export default function RevenuePage() {
     }
   }
 
-  // Safe calculations with fallback to empty array
-  const safeRevenue = Array.isArray(revenue) ? revenue : []
-  const totalRevenue = safeRevenue.reduce((sum, r) => sum + (r.amount || 0), 0)
-  const monthlyRevenue = safeRevenue
+  const totalRevenue = revenue.reduce((sum, r) => sum + r.amount, 0)
+  const monthlyRevenue = revenue
     .filter((r) => new Date(r.production_month).getMonth() === new Date().getMonth())
-    .reduce((sum, r) => sum + (r.amount || 0), 0)
-
-  if (loading) {
-    return (
-      <div className="flex flex-col">
-        <PageHeader
-          title="Revenue Management"
-          description="Track and manage oil & gas revenue streams"
-          breadcrumbs={[{ title: "Financial", href: "/" }, { title: "Revenue" }]}
-        />
-        <div className="flex-1 space-y-4 p-4">
-          <div className="text-center py-12">
-            <p>Loading revenue data...</p>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  if (error) {
-    return (
-      <div className="flex flex-col">
-        <PageHeader
-          title="Revenue Management"
-          description="Track and manage oil & gas revenue streams"
-          breadcrumbs={[{ title: "Financial", href: "/" }, { title: "Revenue" }]}
-        />
-        <div className="flex-1 space-y-4 p-4">
-          <div className="text-center py-12">
-            <p className="text-red-600">Error loading revenue data: {error}</p>
-          </div>
-        </div>
-      </div>
-    )
-  }
+    .reduce((sum, r) => sum + r.amount, 0)
 
   return (
     <div className="flex flex-col">
@@ -300,7 +264,7 @@ export default function RevenuePage() {
               <Clock className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{safeRevenue.filter((r) => r.status === "pending").length}</div>
+              <div className="text-2xl font-bold">{revenue.filter((r) => r.status === "pending").length}</div>
               <p className="text-xs text-muted-foreground">Awaiting approval</p>
             </CardContent>
           </Card>
@@ -310,7 +274,7 @@ export default function RevenuePage() {
               <TrendingUp className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{formatCurrency(totalRevenue / Math.max(safeRevenue.length, 1))}</div>
+              <div className="text-2xl font-bold">{formatCurrency(totalRevenue / Math.max(revenue.length, 1))}</div>
               <p className="text-xs text-muted-foreground">Average revenue</p>
             </CardContent>
           </Card>
@@ -369,7 +333,7 @@ export default function RevenuePage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {safeRevenue.map((entry) => (
+                    {revenue.map((entry) => (
                       <TableRow key={entry.id}>
                         <TableCell>{new Date(entry.production_month).toLocaleDateString()}</TableCell>
                         <TableCell className="font-medium">Eagle Ford #23</TableCell>

@@ -1,179 +1,135 @@
 import { createClient } from "@/lib/supabase-server"
-import { NextResponse } from "next/server"
-import { cookies } from "next/headers"
+import { type NextRequest, NextResponse } from "next/server"
 
-// Force dynamic rendering for this route
-export const dynamic = "force-dynamic"
+export async function GET(request: NextRequest) {
+  const supabase = createClient()
 
-export async function GET(req: Request) {
-  try {
-    console.log("=== Wells API Called ===")
-    console.log("Request cookies:", cookies().getAll())
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser()
 
-    const supabase = await createClient()
+  if (authError || !user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
 
-    // Add a small delay to avoid rate limiting
-    await new Promise((resolve) => setTimeout(resolve, 100))
+  // Get user profile with company_id
+  const { data: profile, error: profileError } = await supabase
+    .from("profiles")
+    .select("company_id, role")
+    .eq("id", user.id)
+    .single()
 
-    // Get the current user with retry logic
-    let user, userError
-    let retries = 3
+  if (profileError) {
+    console.error("Profile error:", profileError)
 
-    while (retries > 0) {
-      try {
-        const result = await supabase.auth.getUser()
-        user = result.data.user
-        userError = result.error
-        console.log("Supabase getUser() result:", result)
-        break
-      } catch (error: any) {
-        console.log(`Auth attempt failed, retries left: ${retries - 1}`, error.message)
-        retries--
-        if (retries === 0) {
-          userError = error
-        } else {
-          await new Promise((resolve) => setTimeout(resolve, 500))
-        }
-      }
-    }
+    // If profile doesn't exist, create a basic one
+    if (profileError.code === "PGRST116") {
+      // No rows returned
+      const { data: newProfile, error: createError } = await supabase
+        .from("profiles")
+        .insert({
+          id: user.id,
+          email: user.email!,
+          full_name: user.user_metadata?.full_name || null,
+          role: "operator",
+        })
+        .select()
+        .single()
 
-    console.log("Wells API - User check:", {
-      hasUser: !!user,
-      userId: user?.id,
-      userEmail: user?.email,
-      userError: userError?.message,
-    })
-
-    if (userError || !user) {
-      console.error("Wells API - No user found:", userError?.message)
-      return NextResponse.json(
-        {
-          error: "Authentication failed",
-          details: userError?.message || "No user found",
-          retry: true,
-        },
-        { status: 401 },
-      )
-    }
-
-    // Get user's profile and company with retry logic
-    let profile, profileError
-    retries = 3
-
-    while (retries > 0) {
-      try {
-        const result = await supabase.from("profiles").select("company_id, role").eq("id", user.id).single()
-
-        profile = result.data
-        profileError = result.error
-        break
-      } catch (error: any) {
-        console.log(`Profile query failed, retries left: ${retries - 1}`, error.message)
-        retries--
-        if (retries === 0) {
-          profileError = error
-        } else {
-          await new Promise((resolve) => setTimeout(resolve, 500))
-        }
-      }
-    }
-
-    console.log("Wells API - Profile check:", {
-      hasProfile: !!profile,
-      companyId: profile?.company_id,
-      role: profile?.role,
-      profileError: profileError?.message,
-    })
-
-    if (profileError) {
-      console.error("Wells API - Profile error:", profileError)
-
-      if (profileError.code === "PGRST116") {
+      if (createError) {
+        console.error("Failed to create profile:", createError)
         return NextResponse.json(
           {
-            error: "Profile not found",
-            details: "User profile needs to be created. Please run the setup scripts.",
-            needsSetup: true,
+            error: "Profile creation failed",
+            details: createError.message,
           },
-          { status: 403 },
+          { status: 500 },
         )
       }
 
-      return NextResponse.json(
-        {
-          error: "Profile lookup failed",
-          details: profileError.message,
-          retry: true,
-        },
-        { status: 500 },
-      )
+      // Return empty wells for new user without company
+      return NextResponse.json({
+        wells: [],
+        message: "Profile created. Please set up your company.",
+      })
     }
 
-    if (!profile?.company_id) {
-      console.log("Wells API - No company associated")
-      return NextResponse.json(
-        {
-          error: "No company associated with user",
-          details: "User needs to be associated with a company. Please run script 19-fix-current-user-company.sql",
-          needsSetup: true,
-        },
-        { status: 403 },
-      )
-    }
-
-    // Before the wells query loop
-    let wells = null, wellsError = null;
-
-    // Get wells for the company with retry logic
-    retries = 3
-
-    while (retries > 0) {
-      try {
-        const result = await supabase.from("wells").select("*").eq("company_id", profile.company_id).order("name")
-
-        wells = result.data
-        wellsError = result.error
-        break
-      } catch (error: any) {
-        console.log(`Wells query failed, retries left: ${retries - 1}`, error.message)
-        retries--
-        if (retries === 0) {
-          wellsError = error
-        } else {
-          await new Promise((resolve) => setTimeout(resolve, 500))
-        }
-      }
-    }
-
-    console.log("Wells API - Wells query:", {
-      companyId: profile.company_id,
-      wellsCount: wells?.length || 0,
-      wellsError: wellsError?.message,
-    })
-
-    if (wellsError) {
-      console.error("Wells API - Query error:", wellsError)
-      return NextResponse.json(
-        {
-          error: "Failed to fetch wells",
-          details: wellsError.message,
-          retry: true,
-        },
-        { status: 500 },
-      )
-    }
-
-    console.log("Wells API - Success:", wells?.length || 0, "wells found")
-    return NextResponse.json({ wells: wells || [] })
-  } catch (error: any) {
-    console.error("Wells API - Unexpected error:", error)
     return NextResponse.json(
       {
-        error: "Internal server error",
-        details: error.message,
-        retry: true,
+        error: "Profile lookup failed",
+        details: profileError.message,
       },
       { status: 500 },
     )
   }
+
+  if (!profile?.company_id) {
+    return NextResponse.json({
+      wells: [],
+      message: "No company associated with user. Please complete setup.",
+    })
+  }
+
+  // Fetch wells for the company
+  const { data: wells, error } = await supabase
+    .from("wells")
+    .select(`
+      *,
+      production:production(
+        production_date,
+        oil_volume,
+        gas_volume,
+        water_volume
+      )
+    `)
+    .eq("company_id", profile.company_id)
+    .order("created_at", { ascending: false })
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+
+  return NextResponse.json({ wells })
+}
+
+export async function POST(request: NextRequest) {
+  const supabase = createClient()
+
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser()
+
+  if (authError || !user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
+
+  const { data: profile } = await supabase.from("profiles").select("company_id, role").eq("id", user.id).single()
+
+  if (!profile?.company_id) {
+    return NextResponse.json({ error: "No company associated with user" }, { status: 400 })
+  }
+
+  if (!["admin", "operator", "accountant"].includes(profile.role)) {
+    return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 })
+  }
+
+  const body = await request.json()
+
+  // Insert new well with company ID
+  const { data: well, error } = await supabase
+    .from("wells")
+    .insert({
+      ...body,
+      company_id: profile.company_id,
+    })
+    .select()
+    .single()
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+
+  return NextResponse.json({ well }, { status: 201 })
 }
