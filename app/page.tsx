@@ -1,5 +1,6 @@
 "use client"
-
+import { useState } from "react"
+import { useAuth } from "@/contexts/auth-context-mock"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -7,7 +8,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Progress } from "@/components/ui/progress"
 import { PageHeader } from "@/components/page-header"
-import { useDashboardStats } from "@/hooks/use-supabase-data"
 import {
   BarChart3,
   TrendingUp,
@@ -15,19 +15,48 @@ import {
   DollarSign,
   Droplets,
   Users,
-  FileText,
   Plus,
   Eye,
   Edit,
   MoreHorizontal,
   AlertTriangle,
   CheckCircle,
+  Loader2,
 } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import Link from "next/link"
 
-export default function Dashboard() {
-  const { stats, loading } = useDashboardStats()
+// Mock data for demo
+const MOCK_WELLS = [
+  { id: 1, name: "Eagle Ford #23", status: "active", production: 1250, revenue: 89500 },
+  { id: 2, name: "Permian #18", status: "active", production: 1180, revenue: 82300 },
+  { id: 3, name: "Bakken #31", status: "active", production: 1050, revenue: 73500 },
+]
+
+const MOCK_REVENUE = [
+  { id: 1, amount: 89500, well_id: 1, date: "2024-01-15" },
+  { id: 2, amount: 82300, well_id: 2, date: "2024-01-14" },
+  { id: 3, amount: 73500, well_id: 3, date: "2024-01-13" },
+]
+
+function DashboardContent() {
+  const { user, loading: authLoading } = useAuth()
+  const [needsSetup, setNeedsSetup] = useState(false)
+  const [checkingSetup, setCheckingSetup] = useState(false)
+
+  const wells = MOCK_WELLS
+  const revenue = MOCK_REVENUE
+  const loading = authLoading
+  const error = null
+
+  // Calculate stats from mock data
+  const stats = {
+    totalRevenue: revenue?.reduce((sum, r) => sum + (r.amount || 0), 0) || 0,
+    totalExpenses: 1245800,
+    activeWells: wells?.filter((w) => w.status === "active")?.length || 0,
+    totalOwners: 156,
+    pendingDistributions: 12,
+  }
 
   // Mock data for demonstration
   const recentTransactions = [
@@ -54,19 +83,24 @@ export default function Dashboard() {
     }).format(amount)
   }
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-center">
+          <Loader2 className="h-8 w-8 animate-spin text-teal-600 mx-auto mb-2" />
+          <p className="text-gray-600">Loading dashboard...</p>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="flex flex-col">
       <PageHeader title="Dashboard" description="Oil & Gas Operations Overview">
         <Button asChild>
-          <Link href="/revenue">
+          <Link href="/wells">
             <Plus className="w-4 h-4 mr-2" />
-            New Transaction
-          </Link>
-        </Button>
-        <Button variant="outline" asChild>
-          <Link href="/reports">
-            <FileText className="w-4 h-4 mr-2" />
-            Generate Report
+            View Wells
           </Link>
         </Button>
       </PageHeader>
@@ -141,11 +175,10 @@ export default function Dashboard() {
 
         {/* Main Content Tabs */}
         <Tabs defaultValue="overview" className="space-y-4">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="wells">Wells</TabsTrigger>
             <TabsTrigger value="transactions">Transactions</TabsTrigger>
-            <TabsTrigger value="reports">Reports</TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview" className="space-y-4">
@@ -301,38 +334,10 @@ export default function Dashboard() {
                     <Button asChild>
                       <Link href="/revenue">
                         <Plus className="w-4 h-4 mr-2" />
-                        Add Revenue
-                      </Link>
-                    </Button>
-                    <Button variant="outline" asChild>
-                      <Link href="/expenses">
-                        <Plus className="w-4 h-4 mr-2" />
-                        Add Expense
+                        View Revenue
                       </Link>
                     </Button>
                   </div>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="reports">
-            <Card>
-              <CardHeader>
-                <CardTitle>Reports & Analytics</CardTitle>
-                <CardDescription>Generate comprehensive reports for compliance and analysis</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="text-center py-12">
-                  <FileText className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                  <h3 className="text-lg font-medium mb-2">Reporting Suite</h3>
-                  <p className="text-gray-600 mb-4">Financial reports, compliance documents, and analytics</p>
-                  <Button asChild>
-                    <Link href="/reports">
-                      <FileText className="w-4 h-4 mr-2" />
-                      Generate Report
-                    </Link>
-                  </Button>
                 </div>
               </CardContent>
             </Card>
@@ -341,4 +346,8 @@ export default function Dashboard() {
       </div>
     </div>
   )
+}
+
+export default function Dashboard() {
+  return <DashboardContent />
 }

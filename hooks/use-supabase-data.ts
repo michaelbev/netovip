@@ -1,146 +1,306 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import { supabase } from "@/lib/supabase"
+import { useState, useEffect, useRef } from "react"
+import { useAuth } from "@/contexts/auth-context"
 
-interface Well {
-  id: string
-  name: string
-  status: string
-  company_id: string
-  created_at: string
+interface UseSupabaseDataOptions {
+  enabled?: boolean
+  refetchInterval?: number
 }
 
-interface Revenue {
-  id: string
-  amount: number
-  well_id: string
-  company_id: string
-  production_month: string
-  status: string
-}
-
-export function useWells() {
-  const [wells, setWells] = useState<Well[]>([])
+export function useSupabaseData<T>(
+  queryFn: () => Promise<{ data: T | null; error: any }>,
+  dependencies: any[] = [],
+  options: UseSupabaseDataOptions = {},
+) {
+  const { enabled = true, refetchInterval } = options
+  const [data, setData] = useState<T | null>(null)
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<any>(null)
+  const { user, session, loading: authLoading } = useAuth()
 
-  useEffect(() => {
-    async function fetchWells() {
-      try {
-        const response = await fetch("/api/wells")
-        const data = await response.json()
+  // Prevent multiple simultaneous requests
+  const requestInProgress = useRef(false)
+  const mountedRef = useRef(true)
 
-        if (!response.ok) {
-          throw new Error(data.error || "Failed to fetch wells")
+  const fetchData = async () => {
+    // Don't fetch if auth is still loading, no user, or no session
+    if (authLoading || !user || !session || !enabled || requestInProgress.current) {
+      console.log("Skipping fetch:", { authLoading, hasUser: !!user, hasSession: !!session, enabled })
+      return
+    }
+
+    requestInProgress.current = true
+    setLoading(true)
+    setError(null)
+
+    try {
+      console.log("Fetching data for user:", user.email)
+
+      // Wait a bit longer to ensure cookies are properly set
+      await new Promise((resolve) => setTimeout(resolve, 500))
+
+      const result = await queryFn()
+
+      if (!mountedRef.current) return
+
+      if (result.error) {
+        console.error("Data fetch error:", result.error)
+
+        // If it's an auth error, try to debug session
+        if (
+          result.error.includes("Authentication") ||
+          result.error.includes("Auth") ||
+          result.error.includes("session")
+        ) {
+          console.log("Auth error detected, checking session...")
+          try {
+            const debugResponse = await fetch("/api/debug/session-test", {
+              credentials: "include",
+            })
+            const debugData = await debugResponse.json()
+            console.log("Session debug info:", debugData)
+          } catch (debugError) {
+            console.error("Failed to debug session:", debugError)
+          }
         }
 
-        setWells(data.wells || [])
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "An error occurred")
-      } finally {
+        setError(result.error)
+        setData(null)
+      } else {
+        setData(result.data)
+        setError(null)
+      }
+    } catch (err) {
+      console.error("Data fetch exception:", err)
+      if (mountedRef.current) {
+        setError(err)
+        setData(null)
+      }
+    } finally {
+      if (mountedRef.current) {
         setLoading(false)
+        requestInProgress.current = false
       }
     }
+  }
 
-    fetchWells()
+  useEffect(() => {
+    mountedRef.current = true
 
-    // Set up real-time subscription
-    const channel = supabase
-      .channel("wells-changes")
-      .on("postgres_changes", { event: "*", schema: "public", table: "wells" }, (payload) => {
-        console.log("Wells change received!", payload)
-        fetchWells() // Refetch data on changes
-      })
-      .subscribe()
+    // Only fetch when auth is ready, user is authenticated, and has a session
+    if (!authLoading && user && session && enabled) {
+      // Add a longer delay to ensure auth state is fully settled
+      const timer = setTimeout(() => {
+        if (mountedRef.current) {
+          fetchData()
+        }
+      }, 1000) // Increased delay
+
+      return () => clearTimeout(timer)
+    } else if (!authLoading && (!user || !session)) {
+      // Clear data when user is not authenticated or no session
+      setData(null)
+      setLoading(false)
+      setError(null)
+    }
 
     return () => {
-      supabase.removeChannel(channel)
+      mountedRef.current = false
     }
-  }, [])
+  }, [user, session, authLoading, enabled, ...dependencies])
 
-  return { wells, loading, error }
+  // Set up refetch interval if specified
+  useEffect(() => {
+    if (!refetchInterval || !enabled || authLoading || !user || !session) return
+
+    const interval = setInterval(() => {
+      if (!requestInProgress.current) {
+        fetchData()
+      }
+    }, refetchInterval)
+
+    return () => clearInterval(interval)
+  }, [refetchInterval, enabled, user, session, authLoading])
+
+  const refetch = () => {
+    if (!requestInProgress.current && user && session) {
+      fetchData()
+    }
+  }
+
+  return { data, loading, error, refetch }
+}
+
+// Specific hooks for different data types with enhanced debugging
+export function useWells() {
+  const { user, session } = useAuth()
+
+  return useSupabaseData(
+    async () => {
+      if (!user || !session) return { data: null, error: null }
+
+      const response = await fetch("/api/wells", {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        return { data: null, error: errorData.error || `HTTP ${response.status}` }
+      }
+
+      const result = await response.json()
+      return { data: result.wells || [], error: null }
+    },
+    [user?.id, session?.access_token],
+    { enabled: !!(user && session) },
+  )
 }
 
 export function useRevenue() {
-  const [revenue, setRevenue] = useState<Revenue[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const { user, session } = useAuth()
 
-  useEffect(() => {
-    async function fetchRevenue() {
-      try {
-        const response = await fetch("/api/revenue")
-        const data = await response.json()
-
-        if (!response.ok) {
-          throw new Error(data.error || "Failed to fetch revenue")
-        }
-
-        setRevenue(data.revenue || [])
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "An error occurred")
-      } finally {
-        setLoading(false)
+  return useSupabaseData(
+    async () => {
+      if (!user || !session) {
+        console.log("useRevenue: No user or session")
+        return { data: null, error: null }
       }
-    }
 
-    fetchRevenue()
+      console.log("useRevenue: Making request with user:", user.email)
 
-    // Set up real-time subscription
-    const channel = supabase
-      .channel("revenue-changes")
-      .on("postgres_changes", { event: "*", schema: "public", table: "revenue" }, (payload) => {
-        console.log("Revenue change received!", payload)
-        fetchRevenue()
+      const response = await fetch("/api/revenue", {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "include", // Ensure cookies are sent
       })
-      .subscribe()
 
-    return () => {
-      supabase.removeChannel(channel)
-    }
-  }, [])
+      console.log("useRevenue: Response status:", response.status)
 
-  return { revenue, loading, error }
+      if (!response.ok) {
+        const errorData = await response.json()
+        console.error("useRevenue: Error response:", errorData)
+        return { data: null, error: errorData.error || `HTTP ${response.status}` }
+      }
+
+      const result = await response.json()
+      console.log("useRevenue: Success, got", result.revenue?.length || 0, "records")
+      return { data: result.revenue || [], error: null }
+    },
+    [user?.id, session?.access_token],
+    { enabled: !!(user && session) },
+  )
 }
 
-export function useDashboardStats() {
-  const [stats, setStats] = useState({
-    totalRevenue: 0,
-    totalExpenses: 0,
-    activeWells: 0,
-    totalOwners: 0,
-    pendingDistributions: 0,
-  })
-  const [loading, setLoading] = useState(true)
+export function useExpenses() {
+  const { user, session } = useAuth()
 
-  useEffect(() => {
-    async function fetchStats() {
-      try {
-        // Fetch aggregated statistics
-        const [revenueRes, wellsRes] = await Promise.all([fetch("/api/revenue"), fetch("/api/wells")])
+  return useSupabaseData(
+    async () => {
+      if (!user || !session) return { data: null, error: null }
 
-        const [revenueData, wellsData] = await Promise.all([revenueRes.json(), wellsRes.json()])
+      const response = await fetch("/api/expenses", {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
+      })
 
-        const totalRevenue = revenueData.revenue?.reduce((sum: number, r: any) => sum + r.amount, 0) || 0
-        const activeWells = wellsData.wells?.filter((w: any) => w.status === "active").length || 0
-
-        setStats({
-          totalRevenue,
-          totalExpenses: 1245800, // Mock data for now
-          activeWells,
-          totalOwners: 156, // Mock data for now
-          pendingDistributions: 12, // Mock data for now
-        })
-      } catch (error) {
-        console.error("Error fetching dashboard stats:", error)
-      } finally {
-        setLoading(false)
+      if (!response.ok) {
+        const errorData = await response.json()
+        return { data: null, error: errorData.error || `HTTP ${response.status}` }
       }
-    }
 
-    fetchStats()
-  }, [])
+      const result = await response.json()
+      return { data: result.expenses || [], error: null }
+    },
+    [user?.id, session?.access_token],
+    { enabled: !!(user && session) },
+  )
+}
 
-  return { stats, loading }
+export function useOwners() {
+  const { user, session } = useAuth()
+
+  return useSupabaseData(
+    async () => {
+      if (!user || !session) return { data: null, error: null }
+
+      const response = await fetch("/api/owners", {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        return { data: null, error: errorData.error || `HTTP ${response.status}` }
+      }
+
+      const result = await response.json()
+      return { data: result.owners || [], error: null }
+    },
+    [user?.id, session?.access_token],
+    { enabled: !!(user && session) },
+  )
+}
+
+export function useProduction() {
+  const { user, session } = useAuth()
+
+  return useSupabaseData(
+    async () => {
+      if (!user || !session) return { data: null, error: null }
+
+      const response = await fetch("/api/production", {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        return { data: null, error: errorData.error || `HTTP ${response.status}` }
+      }
+
+      const result = await response.json()
+      return { data: result.production || [], error: null }
+    },
+    [user?.id, session?.access_token],
+    { enabled: !!(user && session) },
+  )
+}
+
+// Legacy hook for backward compatibility
+export function useSupabaseDataLegacy() {
+  const wells = useWells()
+  const revenue = useRevenue()
+  const owners = useOwners()
+  const production = useProduction()
+
+  return {
+    wells: wells.data || [],
+    revenue: revenue.data || [],
+    owners: owners.data || [],
+    production: production.data || [],
+    loading: wells.loading || revenue.loading || owners.loading || production.loading,
+    error: wells.error || revenue.error || owners.error || production.error,
+    refetch: () => {
+      wells.refetch()
+      revenue.refetch()
+      owners.refetch()
+      production.refetch()
+    },
+  }
 }

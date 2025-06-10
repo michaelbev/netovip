@@ -1,110 +1,96 @@
-import { NextResponse } from "next/server"
-import type { NextRequest } from "next/server"
-import { createServerClient, type CookieOptions } from "@supabase/ssr"
+import { createServerClient } from "@supabase/ssr"
+import { NextResponse, type NextRequest } from "next/server"
 
-export async function middleware(req: NextRequest) {
-  const res = NextResponse.next()
-
-  // Use empty strings as fallbacks during build time
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ""
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ""
-
-  // Skip Supabase auth check if environment variables are missing
-  if (!supabaseUrl || !supabaseAnonKey) {
-    return res
-  }
-
-  // Create Supabase client
-  const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
-    cookies: {
-      get(name: string) {
-        return req.cookies.get(name)?.value
-      },
-      set(name: string, value: string, options: CookieOptions) {
-        res.cookies.set({
-          name,
-          value,
-          ...options,
-        })
-      },
-      remove(name: string, options: CookieOptions) {
-        res.cookies.set({
-          name,
-          value: "",
-          ...options,
-        })
-      },
+export async function middleware(request: NextRequest) {
+  // Create a response object that we can modify
+  let response = NextResponse.next({
+    request: {
+      headers: request.headers,
     },
   })
 
-  // Check if user is authenticated
-  const {
-    data: { session },
-  } = await supabase.auth.getSession()
+  // Check if we're in development mode
+  const isDev = process.env.NODE_ENV === "development"
 
-  // Handle authentication routes
-  const isAuthRoute = req.nextUrl.pathname.startsWith("/login") || req.nextUrl.pathname.startsWith("/signup")
+  // Get environment variables
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
-  // Allow public routes
-  const isPublicRoute =
-    isAuthRoute ||
-    req.nextUrl.pathname.startsWith("/api") ||
-    req.nextUrl.pathname.startsWith("/_next") ||
-    req.nextUrl.pathname === "/"
-
-  if (isPublicRoute) {
-    return res
+  // Log environment info in development
+  if (isDev) {
+    console.log("Middleware - Environment:", {
+      NODE_ENV: process.env.NODE_ENV,
+      hasSupabaseUrl: !!supabaseUrl,
+      hasSupabaseKey: !!supabaseAnonKey,
+      url: request.url,
+    })
   }
 
-  if (!session && !isAuthRoute && !req.nextUrl.pathname.startsWith("/api")) {
-    const redirectUrl = new URL("/login", req.url)
-    redirectUrl.searchParams.set("redirect", req.nextUrl.pathname)
-    return NextResponse.redirect(redirectUrl)
+  // Skip middleware if environment variables are missing
+  if (!supabaseUrl || !supabaseAnonKey) {
+    console.warn("Missing Supabase environment variables in middleware")
+    return response
   }
 
-  if (session && isAuthRoute) {
-    return NextResponse.redirect(new URL("/", req.url))
-  }
-
-  // If authenticated, check tenant association
-  if (session) {
-    // Get user profile with company_id
-    const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", session.user.id).single()
-
-    // If no company associated and not on onboarding page, redirect to onboarding
-    if (
-      !profile?.company_id &&
-      !req.nextUrl.pathname.startsWith("/onboarding") &&
-      !req.nextUrl.pathname.startsWith("/api") &&
-      !req.nextUrl.pathname.startsWith("/signup")
-    ) {
-      return NextResponse.redirect(new URL("/signup", req.url))
-    }
-
-    // Add tenant ID to request headers for API routes
-    if (profile?.company_id && req.nextUrl.pathname.startsWith("/api")) {
-      const requestHeaders = new Headers(req.headers)
-      requestHeaders.set("x-tenant-id", profile.company_id)
-      return NextResponse.next({
-        request: {
-          headers: requestHeaders,
+  try {
+    const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
+      cookies: {
+        get(name: string) {
+          const cookie = request.cookies.get(name)
+          if (!cookie) return undefined
+          
+          // Remove base64- prefix if present
+          if (name === 'oil-gas-accounting-auth' && cookie.value.startsWith('base64-')) {
+            return cookie.value.replace('base64-', '')
+          }
+          return cookie.value
         },
-      })
-    }
-  }
+        set(name: string, value: string, options: any) {
+          // Add base64- prefix to auth cookie
+          if (name === 'oil-gas-accounting-auth') {
+            response.cookies.set(name, `base64-${value}`, options)
+          } else {
+            response.cookies.set(name, value, options)
+          }
+        },
+        remove(name: string, options: any) {
+          response.cookies.delete(name)
+        },
+      },
+    })
 
-  return res
+    // Refresh session if expired - required for Server Components
+    const {
+      data: { user },
+      error,
+    } = await supabase.auth.getUser()
+
+    // Enhanced logging for development
+    if (isDev) {
+      if (error) {
+        console.log("Middleware auth error:", error.message)
+      } else if (user) {
+        console.log("Middleware: User authenticated:", user.email)
+      } else {
+        console.log("Middleware: No authenticated user")
+      }
+    }
+
+    return response
+  } catch (error) {
+    console.error("Middleware error:", error)
+    return response
+  }
 }
 
 export const config = {
   matcher: [
     /*
-     * Match all request paths except:
+     * Match all request paths except for the ones starting with:
      * - _next/static (static files)
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
-     * - public folder
      */
-    "/((?!_next/static|_next/image|favicon.ico|public/).*)",
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 }

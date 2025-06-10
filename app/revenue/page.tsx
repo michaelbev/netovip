@@ -19,7 +19,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { PageHeader } from "@/components/page-header"
-import { useRevenue } from "@/hooks/use-supabase-data"
+import { useRevenue } from "@/hooks/use-supabase-data-mock"
 import { useToast } from "@/hooks/use-toast"
 import {
   Plus,
@@ -38,7 +38,7 @@ import {
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 
 export default function RevenuePage() {
-  const { revenue, loading, error } = useRevenue()
+  const { data: revenueData, loading, error } = useRevenue()
   const { toast } = useToast()
   const [searchTerm, setSearchTerm] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
@@ -54,12 +54,16 @@ export default function RevenuePage() {
     description: "",
   })
 
-  const formatCurrency = (amount: number) => {
+  // Ensure revenue is always an array with proper null checks
+  const revenue = Array.isArray(revenueData) ? revenueData : []
+
+  const formatCurrency = (amount: number | string) => {
+    const numAmount = typeof amount === "string" ? Number.parseFloat(amount) || 0 : amount || 0
     return new Intl.NumberFormat("en-US", {
       style: "currency",
       currency: "USD",
       minimumFractionDigits: 2,
-    }).format(amount)
+    }).format(numAmount)
   }
 
   const getStatusBadge = (status: string) => {
@@ -93,7 +97,7 @@ export default function RevenuePage() {
           </Badge>
         )
       default:
-        return <Badge variant="secondary">{status}</Badge>
+        return <Badge variant="secondary">{status || "Unknown"}</Badge>
     }
   }
 
@@ -110,10 +114,73 @@ export default function RevenuePage() {
     }
   }
 
-  const totalRevenue = revenue.reduce((sum, r) => sum + r.amount, 0)
-  const monthlyRevenue = revenue
-    .filter((r) => new Date(r.production_month).getMonth() === new Date().getMonth())
-    .reduce((sum, r) => sum + r.amount, 0)
+  const handleAddRevenue = () => {
+    toast({
+      title: "Revenue Added",
+      description: "New revenue entry has been added successfully.",
+    })
+    setIsDialogOpen(false)
+    setNewRevenue({
+      well_id: "",
+      amount: "",
+      gross_amount: "",
+      production_month: "",
+      revenue_type: "oil",
+      product_volume: "",
+      product_price: "",
+      description: "",
+    })
+  }
+
+  // Enhanced mock revenue data with more fields and proper null checks
+  const enhancedRevenue = revenue.map((entry: any, index: number) => {
+    const baseEntry = entry || {}
+    return {
+      id: baseEntry.id || `rev-${index + 1}`,
+      production_month: baseEntry.date || baseEntry.production_month || "2024-01-15",
+      revenue_type: (baseEntry.type || baseEntry.revenue_type || "oil").replace("_sale", ""),
+      status: index % 4 === 0 ? "pending" : index % 4 === 1 ? "approved" : index % 4 === 2 ? "distributed" : "approved",
+      amount: baseEntry.amount || 0,
+      gross_amount: (baseEntry.amount || 0) * 1.15,
+      product_volume: baseEntry.volume || baseEntry.product_volume || 45.2,
+      product_price: baseEntry.price_per_barrel || baseEntry.product_price || 65.93,
+      well_name: baseEntry.well_name || "Eagle Ford #23",
+      description: baseEntry.description || `${baseEntry.revenue_type || "Oil"} production revenue`,
+    }
+  })
+
+  // Safe calculations with proper null checks
+  const safeRevenue = Array.isArray(enhancedRevenue) ? enhancedRevenue : []
+  const totalRevenue = safeRevenue.reduce((sum, r) => sum + (Number.parseFloat(r.amount) || 0), 0)
+  const monthlyRevenue = safeRevenue
+    .filter((r) => {
+      try {
+        return new Date(r.production_month).getMonth() === new Date().getMonth()
+      } catch {
+        return false
+      }
+    })
+    .reduce((sum, r) => sum + (Number.parseFloat(r.amount) || 0), 0)
+
+  const pendingCount = safeRevenue.filter((r) => r.status === "pending").length
+  const avgRevenue = safeRevenue.length > 0 ? totalRevenue / safeRevenue.length : 0
+
+  if (loading) {
+    return (
+      <div className="flex flex-col">
+        <PageHeader
+          title="Revenue Management"
+          description="Track and manage oil & gas revenue streams"
+          breadcrumbs={[{ title: "Financial", href: "/" }, { title: "Revenue" }]}
+        />
+        <div className="flex-1 space-y-4 p-4">
+          <div className="text-center py-12">
+            <p>Loading revenue data...</p>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="flex flex-col">
@@ -227,13 +294,22 @@ export default function RevenuePage() {
               <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
                 Cancel
               </Button>
-              <Button>Add Revenue</Button>
+              <Button onClick={handleAddRevenue}>Add Revenue</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
       </PageHeader>
 
       <div className="flex-1 space-y-4 p-4">
+        {/* Demo Mode Indicator */}
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <p className="text-blue-800 font-medium">Demo Mode Active</p>
+          <p className="text-blue-600 text-sm">
+            Displaying sample revenue data for demonstration purposes
+            {error && ` (${error})`}
+          </p>
+        </div>
+
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -264,17 +340,17 @@ export default function RevenuePage() {
               <Clock className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{revenue.filter((r) => r.status === "pending").length}</div>
+              <div className="text-2xl font-bold">{pendingCount}</div>
               <p className="text-xs text-muted-foreground">Awaiting approval</p>
             </CardContent>
           </Card>
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Avg per Well</CardTitle>
+              <CardTitle className="text-sm font-medium">Avg per Entry</CardTitle>
               <TrendingUp className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{formatCurrency(totalRevenue / Math.max(revenue.length, 1))}</div>
+              <div className="text-2xl font-bold">{formatCurrency(avgRevenue)}</div>
               <p className="text-xs text-muted-foreground">Average revenue</p>
             </CardContent>
           </Card>
@@ -316,55 +392,66 @@ export default function RevenuePage() {
             <Card>
               <CardHeader>
                 <CardTitle>Revenue Entries</CardTitle>
-                <CardDescription>Track all revenue from oil & gas production</CardDescription>
+                <CardDescription>
+                  Track all revenue from oil & gas production ({safeRevenue.length} entries)
+                </CardDescription>
               </CardHeader>
               <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Production Month</TableHead>
-                      <TableHead>Well</TableHead>
-                      <TableHead>Type</TableHead>
-                      <TableHead>Volume</TableHead>
-                      <TableHead>Price</TableHead>
-                      <TableHead>Amount</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead className="w-[50px]"></TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {revenue.map((entry) => (
-                      <TableRow key={entry.id}>
-                        <TableCell>{new Date(entry.production_month).toLocaleDateString()}</TableCell>
-                        <TableCell className="font-medium">Eagle Ford #23</TableCell>
-                        <TableCell>
-                          <span className={`capitalize ${getRevenueTypeColor(entry.revenue_type)}`}>
-                            {entry.revenue_type}
-                          </span>
-                        </TableCell>
-                        <TableCell>1,250.5 bbl</TableCell>
-                        <TableCell>$75.25</TableCell>
-                        <TableCell className="font-medium text-green-600">{formatCurrency(entry.amount)}</TableCell>
-                        <TableCell>{getStatusBadge(entry.status)}</TableCell>
-                        <TableCell>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="sm">
-                                <MoreHorizontal className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem>View Details</DropdownMenuItem>
-                              <DropdownMenuItem>Edit Entry</DropdownMenuItem>
-                              <DropdownMenuItem>Calculate Distribution</DropdownMenuItem>
-                              <DropdownMenuItem>Generate Report</DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </TableCell>
+                {safeRevenue.length === 0 ? (
+                  <div className="text-center py-8">
+                    <p className="text-gray-500">No revenue entries found</p>
+                    <p className="text-sm text-gray-400 mt-2">Demo data may be loading...</p>
+                  </div>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Production Month</TableHead>
+                        <TableHead>Well</TableHead>
+                        <TableHead>Type</TableHead>
+                        <TableHead>Volume</TableHead>
+                        <TableHead>Price</TableHead>
+                        <TableHead>Amount</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead className="w-[50px]"></TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                    </TableHeader>
+                    <TableBody>
+                      {safeRevenue.map((entry, index) => (
+                        <TableRow key={entry.id || index}>
+                          <TableCell>
+                            {entry.production_month ? new Date(entry.production_month).toLocaleDateString() : "N/A"}
+                          </TableCell>
+                          <TableCell className="font-medium">{entry.well_name || "Unknown Well"}</TableCell>
+                          <TableCell>
+                            <span className={`capitalize ${getRevenueTypeColor(entry.revenue_type)}`}>
+                              {entry.revenue_type || "oil"}
+                            </span>
+                          </TableCell>
+                          <TableCell>{entry.product_volume || 0} bbl</TableCell>
+                          <TableCell>${entry.product_price || 0}</TableCell>
+                          <TableCell className="font-medium text-green-600">{formatCurrency(entry.amount)}</TableCell>
+                          <TableCell>{getStatusBadge(entry.status)}</TableCell>
+                          <TableCell>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="sm">
+                                  <MoreHorizontal className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem>View Details</DropdownMenuItem>
+                                <DropdownMenuItem>Edit Entry</DropdownMenuItem>
+                                <DropdownMenuItem>Calculate Distribution</DropdownMenuItem>
+                                <DropdownMenuItem>Generate Report</DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -380,6 +467,7 @@ export default function RevenuePage() {
                   <div className="text-center">
                     <TrendingUp className="h-12 w-12 text-gray-400 mx-auto mb-2" />
                     <p className="text-gray-500">Revenue analytics charts would be displayed here</p>
+                    <p className="text-sm text-gray-400 mt-2">Demo Mode: Sample analytics data</p>
                   </div>
                 </div>
               </CardContent>
@@ -396,6 +484,7 @@ export default function RevenuePage() {
                 <div className="text-center py-12">
                   <FileText className="h-12 w-12 text-gray-400 mx-auto mb-2" />
                   <p className="text-gray-500">Distribution management interface</p>
+                  <p className="text-sm text-gray-400 mt-2">Demo Mode: Sample distribution data</p>
                   <Button className="mt-4">Calculate Distributions</Button>
                 </div>
               </CardContent>
